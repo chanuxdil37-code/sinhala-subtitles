@@ -145,6 +145,10 @@ details summary { cursor: pointer; font-weight: 600; font-size: 13px; }
 details[open] summary { margin-bottom: 10px; }
 .note { font-size: 12px; color: var(--muted); background: var(--field); border-radius: 6px; padding: 8px 10px; border: 1px solid var(--line); }
 .note b { color: var(--ink); }
+.saved { font-size: 12px; color: var(--muted); }
+.saved.ok { color: var(--ok); }
+.linkish { background: none; border: 0; padding: 0; color: var(--muted); text-decoration: underline; font: inherit; cursor: pointer; }
+.linkish:hover { color: var(--accent); }
 /* Style studio */
 .studio-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 16px; margin-bottom: 14px; }
 .studio-head h2 { margin: 0; }
@@ -226,6 +230,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
               <option value="custom">Custom Hugging Face model…</option>
             </select>
           </div>
+          <div class="saved" id="modelSaved" aria-live="polite"></div>
           <div class="field" id="customBox" hidden>
             <label for="customModel">Model ID (ONNX, transformers.js compatible)</label>
             <input type="text" id="customModel" placeholder="e.g. your-name/whisper-small-sinhala-onnx">
@@ -561,7 +566,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
   }
   $('engWhisper').onclick = () => setEngine('whisper');
   $('engGemini').onclick = () => setEngine('gemini');
-  $('model').onchange = () => { $('customBox').hidden = $('model').value !== 'custom'; store.set('sss-model2', $('model').value); };
+  $('model').onchange = () => { $('customBox').hidden = $('model').value !== 'custom'; store.set('sss-model2', $('model').value); showModelSaved(); };
   $('apiKey').addEventListener('change', () => { store.set('sss-key', $('apiKey').value.trim()); refreshGeminiModels(true); });
   $('gModel').addEventListener('change', () => store.set('sss-gmodel', $('gModel').value));
   // restore prefs
@@ -581,6 +586,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
       renderCues();
       if (state.engine === 'whisper') await runWhisper(audio);
       else await runGemini(audio);
+      showModelSaved();
       if (!state.cancel) status(`Done · ${state.cues.length} subtitle lines. Review the text, then download.`, 100, 'ok');
     } catch (err) {
       console.error(err);
@@ -604,6 +610,20 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
     // Our own Sinhala model lives in ./models/<name>/ with each .onnx split into parts
     // (GitHub's 100 MB file limit). parts.json lists them; this stitches them back while loading.
     const origFetch = self.fetch.bind(self), manifests = {};
+    function joinParts(base, rel, info) {
+      const body = new ReadableStream({
+        async start(ctrl) {
+          for (let i = 0; i < info.parts; i++) {
+            const r = await origFetch(`${base}${rel}.part${i}`);
+            if (!r.ok) { ctrl.error(new Error(`Could not download model part ${i + 1} of ${info.parts} (HTTP ${r.status}).`)); return; }
+            const rd = r.body.getReader();
+            for (;;) { const { done, value } = await rd.read(); if (done) break; ctrl.enqueue(value); }
+          }
+          ctrl.close();
+        },
+      });
+      return new Response(body, { status: 200, headers: { 'content-length': String(info.size), 'content-type': 'application/octet-stream' } });
+    }
     self.fetch = async (input, init) => {
       const url = typeof input === 'string' ? input : (input && input.url) || String(input);
       const m = url.match(/^(.*\/models\/[^/]+\/)([^?#]+\.onnx)$/);
@@ -613,20 +633,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
           try { const r = await origFetch(base + 'parts.json'); manifests[base] = r.ok ? await r.json() : {}; } catch { manifests[base] = {}; }
         }
         const info = manifests[base][rel];
-        if (info) {
-          const body = new ReadableStream({
-            async start(ctrl) {
-              for (let i = 0; i < info.parts; i++) {
-                const r = await origFetch(`${base}${rel}.part${i}`);
-                if (!r.ok) { ctrl.error(new Error(`Could not download model part ${i + 1} of ${info.parts} (HTTP ${r.status}).`)); return; }
-                const rd = r.body.getReader();
-                for (;;) { const { done, value } = await rd.read(); if (done) break; ctrl.enqueue(value); }
-              }
-              ctrl.close();
-            },
-          });
-          return new Response(body, { status: 200, headers: { 'content-length': String(info.size), 'content-type': 'application/octet-stream' } });
-        }
+        if (info) return joinParts(base, rel, info);
       }
       return origFetch(input, init);
     };
@@ -683,7 +690,11 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
     return new Promise((resolve, reject) => {
       const h = (e) => {
         const d = e.data;
-        if (d.type === 'download') status(`Downloading model… ${(d.loaded / 1048576).toFixed(0)} / ${(d.total / 1048576).toFixed(0)} MB (one-time)`, 5 + 25 * d.loaded / d.total);
+        if (d.type === 'download') {
+          const pct = d.loaded / d.total;
+          if (state.fromCache) status(`Loading the saved model from this computer (no internet used)… ${Math.round(pct * 100)}%`, 5 + 25 * pct);
+          else status(`Downloading model… ${(d.loaded / 1048576).toFixed(0)} / ${(d.total / 1048576).toFixed(0)} MB (only the first time)`, 5 + 25 * pct);
+        }
         else if (d.type === 'error') { worker.removeEventListener('message', h); reject(new Error('Whisper error: ' + d.message)); }
         else if (d.type === 'ready' && msg.type === 'load') { worker.removeEventListener('message', h); resolve(d); }
         else if (d.type === 'result' && d.id === msg.id) { worker.removeEventListener('message', h); resolve(d.out); }
@@ -712,6 +723,41 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
     };
   }
 
+  /* Whether a model's files are already kept in this browser (transformers.js saves them in Cache Storage). */
+  function modelKeyPart(model) { return model.startsWith('local:') ? '/models/' + model.slice(6) + '/' : '/' + model + '/'; }
+  async function isModelSaved(model) {
+    try {
+      if (typeof caches === 'undefined') return false;
+      const url = model.startsWith('local:')
+        ? new URL('models/' + model.slice(6) + '/onnx/decoder_model_merged_quantized.onnx', location.href).href
+        : `https://huggingface.co/${model}/resolve/main/onnx/decoder_model_merged_quantized.onnx`;
+      return !!(await caches.match(url));
+    } catch { return false; }
+  }
+  async function removeSavedModel(model) {
+    const part = modelKeyPart(model);
+    for (const name of await caches.keys()) {
+      const c = await caches.open(name);
+      for (const req of await c.keys()) if (req.url.includes(part)) await c.delete(req);
+    }
+  }
+  async function showModelSaved() {
+    const box = $('modelSaved'); if (!box) return;
+    const model = $('model').value;
+    box.textContent = '';
+    if (model === 'custom') return;
+    if (await isModelSaved(model)) {
+      box.className = 'saved ok';
+      box.append('✓ Saved on this computer. It loads without using internet. ');
+      const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'linkish'; btn.textContent = 'Remove to free space';
+      btn.onclick = async () => { await removeSavedModel(model); if (state.worker) { state.worker.terminate(); state.worker = null; } showModelSaved(); };
+      box.append(btn);
+    } else {
+      box.className = 'saved';
+      box.textContent = model.startsWith('local:') ? 'Not saved yet. The first run downloads ~290 MB once, then it stays on this computer.' : 'Not saved yet. The first run downloads the model once.';
+    }
+  }
+
   async function runWhisper(audio) {
     let model = $('model').value;
     if (model === 'custom') { model = $('customModel').value.trim(); if (!model) throw new Error('Enter a custom model ID first.'); }
@@ -725,7 +771,10 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
       state.workerModel = model;
     }
     let w = state.worker;
-    status('Loading model…', 5);
+    state.fromCache = await isModelSaved(model);
+    // ask the browser not to clear the saved model when disk space runs low
+    try { navigator.storage?.persist?.(); } catch {}
+    status(state.fromCache ? 'Loading the saved model from this computer (no internet used)…' : 'Starting model download (only the first time)…', 5);
     let info;
     try { info = await call(w, { type: 'load', model, base: new URL('.', location.href).href }); }
     catch (e) {
@@ -1245,6 +1294,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
   $('burnStop').onclick = () => { burn.stop = true; burn.media?.pause(); if (burn.rec && burn.rec.state !== 'inactive') burn.rec.stop(); };
 
   renderCues();
+  showModelSaved();
 })();
 </script>
 </body>
