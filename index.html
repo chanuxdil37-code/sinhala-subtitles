@@ -211,7 +211,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
           <div class="row2">
             <div class="field">
               <label for="gModel">Model</label>
-              <input type="text" id="gModel" value="gemini-2.5-flash">
+              <select id="gModel"><option value="auto">Auto (newest Flash)</option></select>
             </div>
             <div class="field">
               <label for="gMode">Audio language</label>
@@ -420,11 +420,11 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
   $('engWhisper').onclick = () => setEngine('whisper');
   $('engGemini').onclick = () => setEngine('gemini');
   $('model').onchange = () => { $('customBox').hidden = $('model').value !== 'custom'; store.set('sss-model', $('model').value); };
-  $('apiKey').addEventListener('change', () => store.set('sss-key', $('apiKey').value.trim()));
-  $('gModel').addEventListener('change', () => store.set('sss-gmodel', $('gModel').value.trim()));
+  $('apiKey').addEventListener('change', () => { store.set('sss-key', $('apiKey').value.trim()); refreshGeminiModels(true); });
+  $('gModel').addEventListener('change', () => store.set('sss-gmodel', $('gModel').value));
   // restore prefs
   if (store.get('sss-key')) $('apiKey').value = store.get('sss-key');
-  if (store.get('sss-gmodel')) $('gModel').value = store.get('sss-gmodel');
+  if (store.get('sss-key')) setTimeout(() => refreshGeminiModels(false), 0);
   if (store.get('sss-model')) { $('model').value = store.get('sss-model'); $('customBox').hidden = $('model').value !== 'custom'; }
   setEngine(store.get('sss-engine') === 'gemini' ? 'gemini' : 'whisper');
 
@@ -609,11 +609,57 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
     return btoa(s);
   }
 
+  const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
+  function geminiError(status, json) {
+    const msg = json?.error?.message || '';
+    if (/API key not valid|API_KEY_INVALID/i.test(msg)) return 'That Gemini API key is not valid. Copy it again from aistudio.google.com/apikey and paste it in.';
+    if (status === 403) return 'This API key is not allowed to use Gemini. Remove any restrictions on the key, or create a new key in AI Studio. (' + msg + ')';
+    if (status === 429) return 'Gemini free limit reached for now. Wait a minute and try again, or try again tomorrow.';
+    if (/location is not supported|User location/i.test(msg)) return 'Gemini is not available in your country through this key. (' + msg + ')';
+    return `Gemini error ${status}: ${msg || 'request failed'}`;
+  }
+  function rankGemini(names) {
+    const bad = /image|tts|live|embed|native-audio|dialog|robotics|computer-use|gemma|aqa|learnlm|veo|imagen|lyria/i;
+    const score = (n) => {
+      const v = parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || '0');
+      let s = v * 100;
+      if (/flash/.test(n)) s += 50;
+      if (/lite/.test(n)) s -= 40;
+      if (/preview|exp/.test(n)) s -= 30;
+      if (/latest/.test(n)) s -= 5;
+      return s;
+    };
+    return names.filter(n => /^gemini/.test(n) && !bad.test(n)).sort((a, b) => score(b) - score(a));
+  }
+  let geminiModels = [];
+  async function refreshGeminiModels(showStatus) {
+    const key = $('apiKey').value.trim(); if (!key) return [];
+    try {
+      const res = await fetch(`${GEMINI}/models?pageSize=1000`, { headers: { 'x-goog-api-key': key } });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(geminiError(res.status, json));
+      geminiModels = rankGemini((json.models || []).filter(m => (m.supportedGenerationMethods || []).includes('generateContent')).map(m => m.name.replace(/^models\//, '')));
+      const sel = $('gModel'), saved = store.get('sss-gmodel');
+      sel.textContent = '';
+      sel.append(new Option(`Auto (${geminiModels[0] || 'newest Flash'})`, 'auto'));
+      geminiModels.forEach(n => sel.append(new Option(n, n)));
+      if (saved && geminiModels.includes(saved)) sel.value = saved;
+      if (showStatus) status(geminiModels.length ? `API key works · ${geminiModels.length} Gemini models available.` : 'This key has no Gemini models available.', null, geminiModels.length ? 'ok' : 'err');
+      return geminiModels;
+    } catch (e) {
+      if (showStatus) status(e.message.startsWith('Gemini') || e.message.startsWith('That') || e.message.startsWith('This') ? e.message : 'Could not reach Gemini: ' + e.message, null, 'err');
+      throw e;
+    }
+  }
+
   async function runGemini(audio) {
     const key = $('apiKey').value.trim();
     if (!key) throw new Error('Paste your Gemini API key first (free at aistudio.google.com/apikey).');
     store.set('sss-key', key);
-    const model = $('gModel').value.trim() || 'gemini-2.5-flash';
+    status('Checking your Gemini key…', 2);
+    if (!geminiModels.length) await refreshGeminiModels(false);
+    if (!geminiModels.length) throw new Error('Your key has no Gemini models that can read audio.');
+    let model = $('gModel').value === 'auto' ? geminiModels[0] : $('gModel').value;
     const translate = $('gMode').value === 'translate';
     const windows = cutPoints(audio, 300, 20);
     for (let i = 0; i < windows.length; i++) {
@@ -626,22 +672,27 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
         : 'Transcribe this Sinhala audio exactly as spoken, in Sinhala script (සිංහල අකුරු). Keep English words that are spoken in English as English.')
         + ` The clip is ${dur.toFixed(1)} seconds long. Split the speech into short subtitle lines of at most about ${+$('maxChars').value || 60} characters, each matching one phrase or sentence.`
         + ' Return a JSON array only, each item {"start": seconds, "end": seconds, "text": string}, with start/end as numbers in seconds from the beginning of this clip, in order and not overlapping.'
+        + ' Write the text ONLY in Sinhala Unicode letters (for example: මම ගෙදර යනවා). Never write Sinhala words in English letters (no Singlish like "mama gedara yanawa").'
         + ' Skip music and silence. If nothing is spoken, return [].';
       const body = {
         contents: [{ role: 'user', parts: [{ inline_data: { mime_type: 'audio/wav', data } }, { text: prompt }] }],
         generationConfig: { temperature: 0.1, responseMimeType: 'application/json' },
       };
       let res, json;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        res = await fetch(`${GEMINI}/models/${encodeURIComponent(model)}:generateContent`, {
           method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body),
         });
         json = await res.json().catch(() => ({}));
+        if (res.status === 404 || (res.status === 400 && /not found|not supported/i.test(json?.error?.message || ''))) {
+          const next = geminiModels[geminiModels.indexOf(model) + 1];
+          if (next) { model = next; status(`Switching to ${model}…`, null); continue; }
+        }
         if (res.ok || ![429, 500, 503].includes(res.status)) break;
         status(`Gemini is busy, retrying part ${i + 1}…`, null);
         await new Promise(r => setTimeout(r, 4000 * (attempt + 1)));
       }
-      if (!res.ok) throw new Error(`Gemini error ${res.status}: ${json?.error?.message || 'request failed'}`);
+      if (!res.ok) throw new Error(geminiError(res.status, json));
       const text = json?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '[]';
       let items;
       try { items = JSON.parse(text.replace(/^```(?:json)?|```$/g, '').trim()); } catch { items = []; }
