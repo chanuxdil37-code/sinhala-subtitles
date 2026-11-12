@@ -6,7 +6,7 @@
 <title>Sinhala Subtitle Studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700&family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700;800&family=Noto+Serif+Sinhala:wght@400;700&family=Abhaya+Libre:wght@400;700;800&family=Yaldevi:wght@400;700&family=Gemunu+Libre:wght@400;700;800&family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
 /* Layout: two-pane studio — media + settings on the left, editable cue list on the right; stacks on phones. */
 :root {
@@ -145,9 +145,38 @@ details summary { cursor: pointer; font-weight: 600; font-size: 13px; }
 details[open] summary { margin-bottom: 10px; }
 .note { font-size: 12px; color: var(--muted); background: var(--field); border-radius: 6px; padding: 8px 10px; border: 1px solid var(--line); }
 .note b { color: var(--ink); }
-.burn { display: grid; gap: 10px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
-.burn h2 { margin: 0; }
-.burn .toolbar .field { width: 170px; }
+/* Style studio */
+.studio-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 16px; margin-bottom: 14px; }
+.studio-head h2 { margin: 0; }
+.studio-head p { margin: 0; max-width: 62ch; }
+.studio-grid { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 20px; align-items: start; }
+@media (max-width: 900px) { .studio-grid { grid-template-columns: minmax(0, 1fr); } }
+.formats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.fmt { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--field); color: var(--ink);
+  border-radius: 7px; padding: 6px 10px 6px 8px; font: 600 12px var(--font-body); cursor: pointer; text-align: left; line-height: 1.2; }
+.fmt small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; }
+.fmt i { display: inline-block; border: 2px solid currentColor; border-radius: 2px; flex: none; opacity: .75; }
+.fmt[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.fmt[aria-pressed="true"] i { color: var(--accent); opacity: 1; }
+.preview-wrap { background: repeating-conic-gradient(var(--field) 0% 25%, var(--panel) 0% 50%) 50% / 20px 20px;
+  border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: flex; justify-content: center; align-items: center; min-height: 260px; }
+.preview-wrap canvas { display: block; max-width: 100%; max-height: 62vh; width: auto; height: auto; border-radius: 4px; box-shadow: 0 4px 18px rgba(0,0,0,.25); }
+.preview-info { margin-top: 6px; font: 12px var(--font-mono); color: var(--muted); display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.controls { display: grid; gap: 14px; }
+.group { display: grid; gap: 8px; }
+.group > .lbl { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--field); color: var(--ink); border-radius: 999px; padding: 5px 12px; font: 600 12px var(--font-body); cursor: pointer; }
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.ctl { display: grid; grid-template-columns: 112px minmax(0, 1fr) 46px; gap: 10px; align-items: center; font-size: 13px; }
+.ctl output { font: 12px var(--font-mono); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.ctl input[type=range] { width: 100%; accent-color: var(--accent); }
+.ctl-inline { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 13px; }
+.ctl-inline label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+input[type=color] { width: 38px; height: 28px; padding: 0 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--field); cursor: pointer; }
+input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
+.make { display: grid; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+@media (max-width: 420px) { .ctl { grid-template-columns: 90px minmax(0, 1fr) 40px; } }
 footer { color: var(--muted); font-size: 12px; text-align: center; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -277,28 +306,97 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
         <button class="btn sm" id="copySrt">Copy SRT</button>
         <button class="btn sm" id="clearAll">Clear</button>
       </div>
-      <div class="burn" id="burnBox">
-        <h2>4 · Burn subtitles into the video</h2>
-        <p class="hint" style="margin:0">Makes a new video with the Sinhala text drawn on every frame, for Facebook, TikTok or WhatsApp. It plays the video once in real time, so a 5-minute video takes about 5 minutes. Keep this tab open and visible.</p>
-        <div class="toolbar" style="border:0;margin:0;padding:0">
-          <div class="field">
-            <label for="burnSize" class="hint">Text size</label>
-            <select id="burnSize"><option value="0.045">Small</option><option value="0.058" selected>Medium</option><option value="0.072">Large</option></select>
-          </div>
-          <div class="field">
-            <label for="burnStyle" class="hint">Style</label>
-            <select id="burnStyle"><option value="outline" selected>White, black outline</option><option value="box">White on dark box</option><option value="yellow">Yellow, black outline</option></select>
-          </div>
-          <button class="btn primary sm" id="burnGo">Make video</button>
-          <button class="btn sm" id="burnStop" hidden>Stop</button>
-        </div>
-        <div class="status" id="burnStatus" hidden>
-          <div class="bar"><i id="burnFill"></i></div>
-          <div class="status-text" id="burnText"></div>
-        </div>
-      </div>
     </section>
   </div>
+
+  <section class="panel" id="studio">
+    <div class="studio-head">
+      <h2>4 · Style &amp; make video</h2>
+      <p class="hint">Choose the video size and how the subtitles look, then make a video with them burned in. The .srt file has text only; players and YouTube use their own style for it.</p>
+    </div>
+    <div class="studio-grid">
+      <div>
+        <div class="formats" role="group" aria-label="Video size" id="formats">
+          <button type="button" class="fmt" data-fmt="original"><i style="width:18px;height:12px"></i><span>Original<small>Same as your video</small></span></button>
+          <button type="button" class="fmt" data-fmt="16:9"><i style="width:20px;height:11px"></i><span>YouTube 16:9<small>1920 × 1080</small></span></button>
+          <button type="button" class="fmt" data-fmt="9:16"><i style="width:10px;height:18px"></i><span>TikTok · Reels · Shorts 9:16<small>1080 × 1920</small></span></button>
+          <button type="button" class="fmt" data-fmt="1:1"><i style="width:14px;height:14px"></i><span>Square 1:1<small>1080 × 1080</small></span></button>
+          <button type="button" class="fmt" data-fmt="4:5"><i style="width:12px;height:15px"></i><span>Instagram / FB post 4:5<small>1080 × 1350</small></span></button>
+          <button type="button" class="fmt" data-fmt="4:3"><i style="width:16px;height:12px"></i><span>Classic 4:3<small>1440 × 1080</small></span></button>
+        </div>
+        <div class="preview-wrap"><canvas id="preview" width="640" height="360" aria-label="Preview of the video with subtitles"></canvas></div>
+        <div class="preview-info"><span id="previewSize">1920 × 1080</span><span>Play or scrub the video above to preview other lines</span></div>
+      </div>
+
+      <div class="controls">
+        <div class="group">
+          <span class="lbl">Quick styles</span>
+          <div class="chips" id="presets">
+            <button type="button" class="chip" data-preset="classic">Classic white</button>
+            <button type="button" class="chip" data-preset="yellow">Yellow</button>
+            <button type="button" class="chip" data-preset="box">Dark box</button>
+            <button type="button" class="chip" data-preset="tiktok">TikTok bold</button>
+            <button type="button" class="chip" data-preset="cinema">Cinema serif</button>
+            <button type="button" class="chip" data-preset="karaoke">Lyrics</button>
+          </div>
+        </div>
+
+        <div class="group">
+          <span class="lbl">Frame</span>
+          <div class="ctl"><label for="stFit">Fit video</label>
+            <select id="stFit"><option value="blur">Fit, blurred background</option><option value="black">Fit, black bars</option><option value="fill">Fill and crop</option></select><span></span></div>
+        </div>
+
+        <div class="group">
+          <span class="lbl">Text</span>
+          <div class="ctl"><label for="stFont">Font</label>
+            <select id="stFont">
+              <option value="Noto Sans Sinhala">Noto Sans Sinhala</option>
+              <option value="Gemunu Libre">Gemunu Libre</option>
+              <option value="Yaldevi">Yaldevi</option>
+              <option value="Abhaya Libre">Abhaya Libre</option>
+              <option value="Noto Serif Sinhala">Noto Serif Sinhala</option>
+            </select><span></span></div>
+          <div class="ctl"><label for="stSize">Size</label><input type="range" id="stSize" min="2.5" max="12" step="0.1"><output id="stSizeV"></output></div>
+          <div class="ctl"><label for="stPos">Height from bottom</label><input type="range" id="stPos" min="2" max="85" step="1"><output id="stPosV"></output></div>
+          <div class="ctl"><label for="stWidth">Line width</label><input type="range" id="stWidth" min="40" max="96" step="1"><output id="stWidthV"></output></div>
+          <div class="ctl-inline">
+            <label><input type="color" id="stColor"> Text colour</label>
+            <label><input type="checkbox" id="stBold"> Bold</label>
+            <label><input type="checkbox" id="stShadow"> Shadow</label>
+          </div>
+        </div>
+
+        <div class="group">
+          <span class="lbl">Outline</span>
+          <div class="ctl"><label for="stOutlineW">Thickness</label><input type="range" id="stOutlineW" min="0" max="30" step="1"><output id="stOutlineWV"></output></div>
+          <div class="ctl-inline"><label><input type="color" id="stOutline"> Outline colour</label></div>
+        </div>
+
+        <div class="group">
+          <span class="lbl">Background box</span>
+          <div class="ctl-inline">
+            <label><input type="checkbox" id="stBox"> Show box behind text</label>
+            <label><input type="color" id="stBoxColor"> Box colour</label>
+          </div>
+          <div class="ctl"><label for="stBoxOpacity">Box opacity</label><input type="range" id="stBoxOpacity" min="10" max="100" step="1"><output id="stBoxOpacityV"></output></div>
+        </div>
+
+        <div class="make">
+          <p class="hint" style="margin:0">The video plays through once in real time to record, so a 5-minute video takes about 5 minutes. Keep this tab open and visible.</p>
+          <div class="actions">
+            <button class="btn primary" id="burnGo">Make video</button>
+            <button class="btn" id="burnStop" hidden>Stop</button>
+            <button class="btn sm" id="stReset" type="button">Reset style</button>
+          </div>
+          <div class="status" id="burnStatus" hidden>
+            <div class="bar"><i id="burnFill"></i></div>
+            <div class="status-text" id="burnText"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <footer>Runs in your browser. Whisper models from Hugging Face via transformers.js.</footer>
 </div>
@@ -840,6 +938,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
     box.appendChild(frag);
     if (scrollToEnd) box.scrollTop = box.scrollHeight;
     onTime();
+    drawPreview();
   }
   $('cues').addEventListener('input', (e) => {
     const row = e.target.closest('.cue'); if (!row) return; const c = state.cues[+row.dataset.i];
@@ -924,16 +1023,83 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
     status(`Imported ${out.length} lines from ${f.name}.`, null, 'ok');
   });
 
-  /* ---------- burn-in (canvas + MediaRecorder; the browser shapes Sinhala text correctly) ---------- */
-  const burn = { rec: null, video: null, stop: false };
-  function burnStatus(text, pct, kind = '') {
-    $('burnStatus').hidden = false; const t = $('burnText'); t.textContent = text; t.className = 'status-text ' + kind;
-    if (pct != null) $('burnFill').style.width = Math.max(0, Math.min(100, pct)) + '%';
+  /* ---------- style studio + burn-in (canvas + MediaRecorder; the browser shapes Sinhala text correctly) ---------- */
+  const FORMATS = { '16:9': [1920, 1080], '9:16': [1080, 1920], '1:1': [1080, 1080], '4:5': [1080, 1350], '4:3': [1440, 1080] };
+  const DEFAULT_STYLE = { fmt: 'original', fit: 'blur', font: 'Noto Sans Sinhala', size: 5.5, pos: 8, width: 88, color: '#ffffff', bold: true,
+    shadow: true, outline: '#000000', outlineW: 14, box: false, boxColor: '#000000', boxOpacity: 65 };
+  const PRESETS = {
+    classic: { font: 'Noto Sans Sinhala', size: 5.5, color: '#ffffff', bold: true, shadow: true, outline: '#000000', outlineW: 14, box: false, pos: 8, width: 88 },
+    yellow:  { font: 'Noto Sans Sinhala', size: 5.5, color: '#ffd83b', bold: true, shadow: true, outline: '#000000', outlineW: 16, box: false, pos: 8, width: 88 },
+    box:     { font: 'Noto Sans Sinhala', size: 5, color: '#ffffff', bold: false, shadow: false, outline: '#000000', outlineW: 0, box: true, boxColor: '#000000', boxOpacity: 70, pos: 7, width: 88 },
+    tiktok:  { font: 'Gemunu Libre', size: 8.5, color: '#ffffff', bold: true, shadow: true, outline: '#000000', outlineW: 22, box: false, pos: 26, width: 80 },
+    cinema:  { font: 'Noto Serif Sinhala', size: 5, color: '#fff7e6', bold: false, shadow: true, outline: '#000000', outlineW: 6, box: false, pos: 6, width: 86 },
+    karaoke: { font: 'Yaldevi', size: 7, color: '#ffffff', bold: true, shadow: true, outline: '#b5462a', outlineW: 18, box: false, pos: 45, width: 86 },
+  };
+  let style = { ...DEFAULT_STYLE };
+  try { Object.assign(style, JSON.parse(store.get('sss-style') || '{}')); } catch {}
+
+  const ctlMap = { stFit: 'fit', stFont: 'font', stSize: 'size', stPos: 'pos', stWidth: 'width', stColor: 'color', stBold: 'bold',
+    stShadow: 'shadow', stOutline: 'outline', stOutlineW: 'outlineW', stBox: 'box', stBoxColor: 'boxColor', stBoxOpacity: 'boxOpacity' };
+  const units = { stSize: '%', stPos: '%', stWidth: '%', stOutlineW: '', stBoxOpacity: '%' };
+  function syncControls() {
+    for (const [id, key] of Object.entries(ctlMap)) {
+      const el = $(id); if (el.type === 'checkbox') el.checked = !!style[key]; else el.value = style[key];
+      const out = $(id + 'V'); if (out) out.textContent = style[key] + (units[id] ?? '');
+    }
+    document.querySelectorAll('.fmt').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.fmt === style.fmt)));
   }
-  function pickMime() {
-    const list = ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4',
-      'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
-    return list.find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || '';
+  function saveStyle() { store.set('sss-style', JSON.stringify(style)); }
+  for (const [id, key] of Object.entries(ctlMap)) {
+    $(id).addEventListener('input', (e) => {
+      const el = e.target;
+      style[key] = el.type === 'checkbox' ? el.checked : (el.type === 'range' ? parseFloat(el.value) : el.value);
+      const out = $(id + 'V'); if (out) out.textContent = style[key] + (units[id] ?? '');
+      saveStyle(); loadFont().then(drawPreview);
+    });
+  }
+  $('formats').addEventListener('click', (e) => {
+    const b = e.target.closest('.fmt'); if (!b) return;
+    style.fmt = b.dataset.fmt; saveStyle(); syncControls(); drawPreview();
+  });
+  $('presets').addEventListener('click', (e) => {
+    const b = e.target.closest('.chip'); if (!b) return;
+    Object.assign(style, PRESETS[b.dataset.preset]); saveStyle(); syncControls(); loadFont().then(drawPreview);
+  });
+  $('stReset').onclick = () => { style = { ...DEFAULT_STYLE }; saveStyle(); syncControls(); loadFont().then(drawPreview); };
+
+  function loadFont() {
+    return document.fonts.load(`${style.bold ? 700 : 400} 40px "${style.font}"`, 'සිංහල').catch(() => {});
+  }
+  function hexA(hex, a) {
+    const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
+  }
+  function outputSize(src) {
+    if (FORMATS[style.fmt]) return FORMATS[style.fmt];
+    let W = src?.videoWidth || 1920, H = src?.videoHeight || 1080;
+    const k = Math.min(1, 1920 / Math.max(W, H));
+    return [Math.round(W * k / 2) * 2, Math.round(H * k / 2) * 2];
+  }
+
+  const blurCanvas = document.createElement('canvas'), blurCtx = blurCanvas.getContext('2d');
+  function drawBackground(ctx, W, H, v) {
+    const vw = v?.videoWidth, vh = v?.videoHeight;
+    if (!vw || !vh || v.readyState < 2) {
+      const g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#2a1d18'); g.addColorStop(1, '#101614');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); return;
+    }
+    const cover = Math.max(W / vw, H / vh), fit = Math.min(W / vw, H / vh);
+    if (style.fit === 'fill') { ctx.drawImage(v, (W - vw * cover) / 2, (H - vh * cover) / 2, vw * cover, vh * cover); return; }
+    if (style.fit === 'blur') {
+      // cheap blur: draw tiny, scale up smoothly, darken
+      const bw = Math.max(8, Math.round(W / 28)), bh = Math.max(8, Math.round(H / 28));
+      if (blurCanvas.width !== bw || blurCanvas.height !== bh) { blurCanvas.width = bw; blurCanvas.height = bh; }
+      const c2 = Math.max(bw / vw, bh / vh);
+      blurCtx.drawImage(v, (bw - vw * c2) / 2, (bh - vh * c2) / 2, vw * c2, vh * c2);
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(blurCanvas, 0, 0, W, H);
+      ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(0, 0, W, H);
+    } else { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); }
+    ctx.drawImage(v, (W - vw * fit) / 2, (H - vh * fit) / 2, vw * fit, vh * fit);
   }
   function wrapLines(ctx, text, maxW) {
     const out = [];
@@ -947,91 +1113,136 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
     }
     return out;
   }
-  function drawSub(ctx, W, H, text, sizeK, style) {
+  function drawSubtitle(ctx, W, H, text) {
     if (!text) return;
-    const fs = Math.round(Math.min(H, W * 0.75) * sizeK);
-    ctx.font = `600 ${fs}px "Noto Sans Sinhala", "Iskoola Pota", "Nirmala UI", sans-serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round';
-    const lines = wrapLines(ctx, text, W * 0.88);
-    const lh = fs * 1.42, bottom = H - H * 0.07;
+    const fs = Math.max(8, Math.round(Math.min(W, H) * style.size / 100));
+    ctx.font = `${style.bold ? 700 : 400} ${fs}px "${style.font}", "Noto Sans Sinhala", "Iskoola Pota", "Nirmala UI", sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round'; ctx.miterLimit = 2;
+    const lines = wrapLines(ctx, text, W * style.width / 100);
+    const lh = fs * 1.5, bottom = H - H * style.pos / 100 - fs * 0.4, x = W / 2;
     lines.forEach((ln, i) => {
       const y = bottom - (lines.length - 1 - i) * lh;
-      if (style === 'box') {
-        const w = ctx.measureText(ln).width + fs * 0.7;
-        ctx.fillStyle = 'rgba(0,0,0,0.72)';
-        ctx.fillRect(W / 2 - w / 2, y - fs * 1.05, w, lh);
-        ctx.fillStyle = '#fff'; ctx.fillText(ln, W / 2, y);
-      } else {
-        ctx.strokeStyle = '#000'; ctx.lineWidth = Math.max(2, fs * 0.16); ctx.strokeText(ln, W / 2, y);
-        ctx.fillStyle = style === 'yellow' ? '#ffd83b' : '#fff'; ctx.fillText(ln, W / 2, y);
+      if (style.box) {
+        const w = ctx.measureText(ln).width + fs * 0.8, top = y - fs * 1.12, h = fs * 1.55;
+        ctx.fillStyle = hexA(style.boxColor, style.boxOpacity / 100);
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(x - w / 2, top, w, h, fs * 0.18); else ctx.rect(x - w / 2, top, w, h);
+        ctx.fill();
       }
+      if (style.shadow) { ctx.shadowColor = 'rgba(0,0,0,0.65)'; ctx.shadowBlur = fs * 0.22; ctx.shadowOffsetY = fs * 0.06; }
+      if (style.outlineW > 0) {
+        ctx.strokeStyle = style.outline; ctx.lineWidth = fs * style.outlineW / 100; ctx.strokeText(ln, x, y);
+        ctx.shadowColor = 'transparent';
+      }
+      ctx.fillStyle = style.color; ctx.fillText(ln, x, y);
+      ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
     });
+  }
+  function cueAt(t) { const c = state.cues.find(c => t >= c.start && t <= c.end); return c ? c.text.trim() : ''; }
+
+  const SAMPLE = 'මේ ඔබේ උපසිරැසි පෙනෙන ආකාරයයි';
+  function drawPreview() {
+    const cv = $('preview'), v = state.mediaEl?.tagName === 'VIDEO' ? state.mediaEl : null;
+    const [OW, OH] = outputSize(v);
+    const k = Math.min(1, 720 / Math.max(OW, OH)), W = Math.round(OW * k), H = Math.round(OH * k);
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    const ctx = cv.getContext('2d');
+    drawBackground(ctx, W, H, v);
+    const t = state.mediaEl ? state.mediaEl.currentTime : -1;
+    drawSubtitle(ctx, W, H, cueAt(t) || state.cues[0]?.text.trim() || SAMPLE);
+    $('previewSize').textContent = `${OW} × ${OH}`;
+  }
+  let previewLoop = 0;
+  function hookPreview(el) {
+    ['loadeddata', 'seeked', 'timeupdate', 'pause'].forEach(ev => el.addEventListener(ev, drawPreview));
+    el.addEventListener('play', () => {
+      cancelAnimationFrame(previewLoop);
+      const tick = () => { drawPreview(); if (!el.paused && !el.ended) previewLoop = requestAnimationFrame(tick); };
+      tick();
+    });
+  }
+  // hook into media loading and cue edits
+  const _loadFile = loadFile;
+  loadFile = async function (file) { await _loadFile(file); hookPreview(state.mediaEl); drawPreview(); };
+  $('cues').addEventListener('input', () => drawPreview());
+  syncControls(); loadFont().then(drawPreview);
+  document.fonts.ready.then(drawPreview);
+
+  /* ---------- making the video ---------- */
+  const burn = { rec: null, media: null, stop: false };
+  function burnStatus(text, pct, kind = '') {
+    $('burnStatus').hidden = false; const t = $('burnText'); t.textContent = text; t.className = 'status-text ' + kind;
+    if (pct != null) $('burnFill').style.width = Math.max(0, Math.min(100, pct)) + '%';
+  }
+  function pickMime() {
+    const list = ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4',
+      'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+    return list.find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || '';
   }
 
   $('burnGo').onclick = async () => {
-    if (!state.file) { burnStatus('Choose a video file first.', null, 'err'); return; }
-    if (state.mediaEl?.tagName !== 'VIDEO') { burnStatus('Burning needs a video file. For audio, download the .srt instead.', null, 'err'); return; }
+    if (!state.file) { burnStatus('Choose a video or audio file first (step 1).', null, 'err'); return; }
     if (!state.cues.length) { burnStatus('Generate or import subtitles first.', null, 'err'); return; }
     const mime = pickMime();
     if (!mime) { burnStatus('This browser cannot record video. Use Chrome or Edge on a computer.', null, 'err'); return; }
     state.mediaEl.pause();
     $('burnGo').disabled = true; $('burnStop').hidden = false; burn.stop = false;
+    const isVideo = state.mediaEl.tagName === 'VIDEO';
     try {
-      await document.fonts.load('600 40px "Noto Sans Sinhala"', 'සිංහල').catch(() => {});
-      const v = document.createElement('video');
-      v.src = state.mediaEl.src; v.playsInline = true; v.preload = 'auto';
-      burn.video = v;
-      await new Promise((res, rej) => { v.onloadedmetadata = res; v.onerror = () => rej(new Error('Could not open the video for burning.')); });
-      let W = v.videoWidth, H = v.videoHeight;
-      const scale = Math.min(1, 1920 / Math.max(W, H)); W = Math.round(W * scale / 2) * 2; H = Math.round(H * scale / 2) * 2;
+      await loadFont();
+      const m = document.createElement(isVideo ? 'video' : 'audio');
+      m.src = state.mediaEl.src; m.playsInline = true; m.preload = 'auto';
+      burn.media = m;
+      await new Promise((res, rej) => { m.onloadedmetadata = res; m.onerror = () => rej(new Error('Could not open the file for recording.')); });
+      if (isVideo) await new Promise(res => { if (m.readyState >= 2) res(); else m.onloadeddata = res; });
+      const [W, H] = outputSize(isVideo ? m : null);
       const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
       const ctx = canvas.getContext('2d');
       const stream = canvas.captureStream(30);
       let actx = null;
       try {
         actx = new AudioContext();
-        const src = actx.createMediaElementSource(v); const dest = actx.createMediaStreamDestination();
+        const src = actx.createMediaElementSource(m); const dest = actx.createMediaStreamDestination();
         src.connect(dest); await actx.resume();
         dest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
       } catch (e) { console.warn('No audio track', e); }
       const chunks = [];
-      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: Math.round(Math.max(2.5e6, W * H * 30 * 0.12)), audioBitsPerSecond: 160000 });
+      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: Math.round(Math.max(3e6, W * H * 30 * 0.14)), audioBitsPerSecond: 160000 });
       burn.rec = rec;
       rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
       const done = new Promise(res => { rec.onstop = res; });
-      const sizeK = +$('burnSize').value, style = $('burnStyle').value, dur = v.duration;
-      const t0 = performance.now();
+      const dur = m.duration;
       const draw = () => {
-        ctx.drawImage(v, 0, 0, W, H);
-        const t = v.currentTime; const c = state.cues.find(c => t >= c.start && t <= c.end);
-        drawSub(ctx, W, H, c ? c.text.trim() : '', sizeK, style);
-        const el = (performance.now() - t0) / 1000;
-        burnStatus(`Recording… ${fmt(t, '.').slice(3, 8)} of ${fmt(dur, '.').slice(3, 8)} · keep this tab visible`, 100 * t / dur);
-        if (!v.paused && !v.ended) schedule();
+        drawBackground(ctx, W, H, isVideo ? m : null);
+        drawSubtitle(ctx, W, H, cueAt(m.currentTime));
+        burnStatus(`Recording ${W}×${H}… ${fmt(m.currentTime, '.').slice(3, 8)} of ${fmt(dur, '.').slice(3, 8)} · keep this tab visible`, 100 * m.currentTime / dur);
+        if (!m.paused && !m.ended) schedule();
       };
-      const schedule = () => v.requestVideoFrameCallback ? v.requestVideoFrameCallback(draw) : requestAnimationFrame(draw);
-      v.onended = () => { setTimeout(() => rec.state !== 'inactive' && rec.stop(), 300); };
+      const schedule = () => isVideo && m.requestVideoFrameCallback ? m.requestVideoFrameCallback(draw) : setTimeout(draw, 33);
+      m.onended = () => { setTimeout(() => rec.state !== 'inactive' && rec.stop(), 300); };
+      draw();
       rec.start(1000);
-      await v.play();
+      await m.play();
       schedule();
       await done;
       actx?.close?.();
       if (burn.stop) { burnStatus('Stopped. No video was saved.', null); return; }
       const ext = mime.startsWith('video/mp4') ? 'mp4' : 'webm';
       const blob = new Blob(chunks, { type: mime.split(';')[0] });
+      const tag = FORMATS[style.fmt] ? '.' + style.fmt.replace(':', 'x') : '';
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-      a.download = (state.file.name.replace(/\.[^.]+$/, '')) + '.si-subtitled.' + ext;
+      a.download = state.file.name.replace(/\.[^.]+$/, '') + '.si-subtitled' + tag + '.' + ext;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-      burnStatus(`Saved ${a.download} (${(blob.size / 1048576).toFixed(1)} MB).${ext === 'webm' ? ' WebM plays in Chrome and VLC; upload sites accept it too.' : ''}`, 100, 'ok');
+      burnStatus(`Saved ${a.download} (${(blob.size / 1048576).toFixed(1)} MB).${ext === 'webm' ? ' WebM plays in Chrome and VLC; TikTok, YouTube and Facebook accept it.' : ''}`, 100, 'ok');
     } catch (err) {
       console.error(err); burnStatus(err.message || String(err), null, 'err');
     } finally {
       $('burnGo').disabled = false; $('burnStop').hidden = true;
-      if (burn.video) { burn.video.pause(); burn.video.removeAttribute('src'); burn.video = null; }
+      if (burn.media) { burn.media.pause(); burn.media.removeAttribute('src'); burn.media = null; }
     }
   };
-  $('burnStop').onclick = () => { burn.stop = true; burn.video?.pause(); if (burn.rec && burn.rec.state !== 'inactive') burn.rec.stop(); };
+  $('burnStop').onclick = () => { burn.stop = true; burn.media?.pause(); if (burn.rec && burn.rec.state !== 'inactive') burn.rec.stop(); };
 
   renderCues();
 })();
