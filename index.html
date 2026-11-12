@@ -509,17 +509,65 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
     });
   }
 
+  /* Same protocol as the worker, run on the page itself. Used when the page is opened
+     as a local file (file://), where browsers refuse module workers. */
+  function makeInlineWorker() {
+    const et = new EventTarget(); let asr = null, loaded = null, dead = false;
+    const emit = (data) => { if (!dead) setTimeout(() => et.dispatchEvent(new MessageEvent('message', { data })), 0); };
+    async function handle(m) {
+      try {
+        const { pipeline, env } = await import(TRANSFORMERS_URL);
+        env.allowLocalModels = false;
+        if (m.type === 'load') {
+          if (!(asr && loaded === m.model)) {
+            const files = {};
+            const progress_callback = (p) => {
+              if (p.status === 'progress' && p.total) { files[p.file] = [p.loaded, p.total];
+                let l = 0, t = 0; for (const k in files) { l += files[k][0]; t += files[k][1]; }
+                emit({ type: 'download', loaded: l, total: t }); }
+            };
+            let device = 'wasm';
+            if (navigator.gpu) { try { if (await navigator.gpu.requestAdapter()) device = 'webgpu'; } catch {} }
+            const opts = device === 'webgpu' ? { device, dtype: { encoder_model: 'fp32', decoder_model_merged: 'q4' }, progress_callback } : { device, dtype: 'q8', progress_callback };
+            try { asr = await pipeline('automatic-speech-recognition', m.model, opts); }
+            catch (e) { if (device !== 'webgpu') throw e; device = 'wasm'; asr = await pipeline('automatic-speech-recognition', m.model, { device, dtype: 'q8', progress_callback }); }
+            loaded = m.model; et.device = device;
+          }
+          emit({ type: 'ready', device: et.device });
+        } else if (m.type === 'run') {
+          const out = await asr(m.audio, { language: 'sinhala', task: 'transcribe', return_timestamps: true, no_repeat_ngram_size: 4 });
+          emit({ type: 'result', id: m.id, out });
+        }
+      } catch (err) { emit({ type: 'error', message: String(err && err.message || err) }); }
+    }
+    return {
+      inline: true,
+      addEventListener: et.addEventListener.bind(et), removeEventListener: et.removeEventListener.bind(et),
+      postMessage: (m) => { setTimeout(() => handle(m), 0); }, terminate: () => { dead = true; },
+    };
+  }
+
   async function runWhisper(audio) {
     let model = $('model').value;
     if (model === 'custom') { model = $('customModel').value.trim(); if (!model) throw new Error('Enter a custom model ID first.'); }
     if (!state.worker || state.workerModel !== model) {
       if (state.worker) state.worker.terminate();
-      const url = URL.createObjectURL(new Blob([workerSrc], { type: 'text/javascript' }));
-      state.worker = new Worker(url, { type: 'module' }); state.workerModel = model;
+      if (location.protocol === 'file:' || state.forceInline) state.worker = makeInlineWorker();
+      else {
+        const url = URL.createObjectURL(new Blob([workerSrc], { type: 'text/javascript' }));
+        state.worker = new Worker(url, { type: 'module' });
+      }
+      state.workerModel = model;
     }
-    const w = state.worker;
+    let w = state.worker;
     status('Loading model…', 5);
-    const info = await call(w, { type: 'load', model });
+    let info;
+    try { info = await call(w, { type: 'load', model }); }
+    catch (e) {
+      if (w.inline || !/Worker failed/.test(e.message)) throw e;
+      w.terminate(); state.forceInline = true; w = state.worker = makeInlineWorker();
+      info = await call(w, { type: 'load', model });
+    }
     const device = info.device === 'webgpu' ? 'GPU' : 'CPU';
     const windows = cutPoints(audio, 30, 6);
     const t0 = performance.now();

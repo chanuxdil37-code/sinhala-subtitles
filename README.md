@@ -13,4 +13,6 @@ It is one static file, `index.html`, with no server code. Host it anywhere that 
 python3 -m http.server 8000
 ```
 
-Then open http://localhost:8000 in Chrome or Edge. Chrome or Edge on a computer works best, because WebGPU makes Whisper faster and their MP4 recording is used for burn-in.
+Then open http://localhost:8000 in Chrome or Edge. You can also just double-click `index.html`; it works, but the page may freeze briefly while each part is transcribed.
+
+Chrome or Edge on a computer works best, because WebGPU makes Whisper faster and their MP4 recording is used for burn-in.
