@@ -188,10 +188,12 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
           <div class="field">
             <label for="model">Model</label>
             <select id="model">
-              <option value="onnx-community/whisper-tiny">Tiny · ~40 MB · fastest, rough</option>
-              <option value="onnx-community/whisper-base" selected>Base · ~80 MB · fast</option>
-              <option value="onnx-community/whisper-small">Small · ~250 MB · better</option>
-              <option value="onnx-community/whisper-large-v3-turbo">Large v3 Turbo · ~800 MB · best, needs WebGPU</option>
+              <option value="local:sinhala-small" selected>Sinhala Whisper · trained on Sinhala · ~290 MB · recommended</option>
+              <optgroup label="Original Whisper (weak at Sinhala)">
+              <option value="onnx-community/whisper-base">Base · ~80 MB</option>
+              <option value="onnx-community/whisper-small">Small · ~250 MB</option>
+              <option value="onnx-community/whisper-large-v3-turbo">Large v3 Turbo · ~800 MB · needs WebGPU</option>
+              </optgroup>
               <option value="custom">Custom Hugging Face model…</option>
             </select>
           </div>
@@ -199,7 +201,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
             <label for="customModel">Model ID (ONNX, transformers.js compatible)</label>
             <input type="text" id="customModel" placeholder="e.g. your-name/whisper-small-sinhala-onnx">
           </div>
-          <div class="note">Whisper's Sinhala accuracy is limited, especially on the small models. Expect to edit the text. The model downloads once and is cached by the browser.</div>
+          <div class="note"><b>Sinhala Whisper</b> is a version of Whisper trained on Sinhala speech, so it writes proper Sinhala letters. It downloads once (~290 MB) and the browser keeps it. It runs on your computer's processor, so a 10-minute video can take 10–20 minutes. Check the text before you export.</div>
         </div>
 
         <div id="geminiOpts" class="stack" hidden>
@@ -408,6 +410,48 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
     return pts;
   }
 
+  /* Split speech at natural pauses: one phrase per piece. Gives the Sinhala-trained model
+     (which learned on single sentences) clean input and gives each subtitle real start/end times. */
+  function segmentSpeech(audio, maxLen = 12) {
+    const F = 480, n = Math.floor(audio.length / F), db = new Float32Array(n);
+    for (let f = 0; f < n; f++) {
+      let e = 0; for (let i = f * F; i < (f + 1) * F; i++) e += audio[i] * audio[i];
+      db[f] = 10 * Math.log10(e / F + 1e-10);
+    }
+    const sorted = Array.from(db).sort((a, b) => a - b);
+    const floor = sorted[Math.floor(n * 0.1)] ?? -80;
+    const thr = Math.max(floor + 10, -55);
+    const speech = Array.from(db, d => d > thr);
+    const minSil = Math.round(0.3 / 0.03);
+    const segs = []; let f = 0;
+    while (f < n) {
+      while (f < n && !speech[f]) f++;
+      if (f >= n) break;
+      let start = f, end = f, silent = 0;
+      while (f < n) {
+        if (speech[f]) { end = f; silent = 0; } else if (++silent >= minSil) break;
+        f++;
+      }
+      segs.push([start, end + 1]);
+    }
+    // merge tiny blips into neighbours, drop clicks
+    const merged = [];
+    for (const sg of segs) {
+      const last = merged[merged.length - 1];
+      if (last && (sg[1] - sg[0] < 20 || last[1] - last[0] < 20) && sg[0] - last[1] < 25 && (sg[1] - last[0]) * 0.03 <= maxLen) last[1] = sg[1];
+      else merged.push(sg);
+    }
+    const out = [];
+    for (const [a, b] of merged) {
+      if ((b - a) * 0.03 < 0.3) continue;
+      const s0 = Math.max(0, a * F - 0.15 * SR), e0 = Math.min(audio.length, b * F + 0.2 * SR);
+      if ((e0 - s0) / SR <= maxLen) { out.push([s0, e0]); continue; }
+      // long stretch without pauses: cut at the quietest spots
+      for (const [x, y] of cutPoints(audio.subarray(s0, e0), maxLen, 5)) out.push([s0 + x, s0 + y]);
+    }
+    return out;
+  }
+
   /* ---------- engine switch ---------- */
   function setEngine(e) {
     state.engine = e;
@@ -419,13 +463,13 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
   }
   $('engWhisper').onclick = () => setEngine('whisper');
   $('engGemini').onclick = () => setEngine('gemini');
-  $('model').onchange = () => { $('customBox').hidden = $('model').value !== 'custom'; store.set('sss-model', $('model').value); };
+  $('model').onchange = () => { $('customBox').hidden = $('model').value !== 'custom'; store.set('sss-model2', $('model').value); };
   $('apiKey').addEventListener('change', () => { store.set('sss-key', $('apiKey').value.trim()); refreshGeminiModels(true); });
   $('gModel').addEventListener('change', () => store.set('sss-gmodel', $('gModel').value));
   // restore prefs
   if (store.get('sss-key')) $('apiKey').value = store.get('sss-key');
   if (store.get('sss-key')) setTimeout(() => refreshGeminiModels(false), 0);
-  if (store.get('sss-model')) { $('model').value = store.get('sss-model'); $('customBox').hidden = $('model').value !== 'custom'; }
+  if (store.get('sss-model2')) { $('model').value = store.get('sss-model2'); $('customBox').hidden = $('model').value !== 'custom'; }
   setEngine(store.get('sss-engine') === 'gemini' ? 'gemini' : 'whisper');
 
   /* ---------- run ---------- */
@@ -453,45 +497,88 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
     status(`Stopped · kept ${state.cues.length} lines.`, null);
   };
 
-  /* ---------- Whisper (transformers.js in a worker) ---------- */
-  const workerSrc = `
-    import { pipeline, env } from '${TRANSFORMERS_URL}';
-    env.allowLocalModels = false;
-    let asr = null, loaded = null;
-    async function load(model) {
+  /* ---------- Whisper (transformers.js) ----------
+     createEngine() runs inside a Web Worker (its source is serialized below) or, when the page
+     is opened as a local file and workers are refused, directly on the page. Keep it self-contained. */
+  function createEngine(emit, lib) {
+    const { pipeline, env } = lib;
+    let asr = null, loaded = null, device = 'wasm';
+    // Our own Sinhala model lives in ./models/<name>/ with each .onnx split into parts
+    // (GitHub's 100 MB file limit). parts.json lists them; this stitches them back while loading.
+    const origFetch = self.fetch.bind(self), manifests = {};
+    self.fetch = async (input, init) => {
+      const url = typeof input === 'string' ? input : (input && input.url) || String(input);
+      const m = url.match(/^(.*\/models\/[^/]+\/)([^?#]+\.onnx)$/);
+      if (m) {
+        const base = m[1], rel = m[2];
+        if (!(base in manifests)) {
+          try { const r = await origFetch(base + 'parts.json'); manifests[base] = r.ok ? await r.json() : {}; } catch { manifests[base] = {}; }
+        }
+        const info = manifests[base][rel];
+        if (info) {
+          const body = new ReadableStream({
+            async start(ctrl) {
+              for (let i = 0; i < info.parts; i++) {
+                const r = await origFetch(`${base}${rel}.part${i}`);
+                if (!r.ok) { ctrl.error(new Error(`Could not download model part ${i + 1} of ${info.parts} (HTTP ${r.status}).`)); return; }
+                const rd = r.body.getReader();
+                for (;;) { const { done, value } = await rd.read(); if (done) break; ctrl.enqueue(value); }
+              }
+              ctrl.close();
+            },
+          });
+          return new Response(body, { status: 200, headers: { 'content-length': String(info.size), 'content-type': 'application/octet-stream' } });
+        }
+      }
+      return origFetch(input, init);
+    };
+    async function load(model, base) {
       if (asr && loaded === model) return;
       const files = {};
       const progress_callback = (p) => {
-        if (p.status === 'progress' && p.total) { files[p.file] = [p.loaded, p.total];
+        if (p.status === 'progress' && p.total) {
+          files[p.file] = [p.loaded, p.total];
           let l = 0, t = 0; for (const k in files) { l += files[k][0]; t += files[k][1]; }
-          postMessage({ type: 'download', loaded: l, total: t });
+          emit({ type: 'download', loaded: l, total: t });
         }
       };
-      let device = 'wasm';
-      if (self.navigator && navigator.gpu) { try { const a = await navigator.gpu.requestAdapter(); if (a) device = 'webgpu'; } catch {} }
-      const opts = device === 'webgpu'
-        ? { device, dtype: { encoder_model: 'fp32', decoder_model_merged: 'q4' }, progress_callback }
-        : { device, dtype: 'q8', progress_callback };
-      try { asr = await pipeline('automatic-speech-recognition', model, opts); }
-      catch (e) {
-        if (device !== 'webgpu') throw e;
+      let id = model;
+      if (model.startsWith('local:')) {
+        // Ships only 8-bit files, which run on the CPU (WebAssembly).
+        id = model.slice(6);
+        env.allowLocalModels = true; env.allowRemoteModels = false; env.localModelPath = base + 'models/';
         device = 'wasm';
-        asr = await pipeline('automatic-speech-recognition', model, { device, dtype: 'q8', progress_callback });
+        asr = await pipeline('automatic-speech-recognition', id, { device, dtype: 'q8', progress_callback });
+      } else {
+        env.allowLocalModels = false; env.allowRemoteModels = true;
+        device = 'wasm';
+        if (self.navigator && navigator.gpu) { try { if (await navigator.gpu.requestAdapter()) device = 'webgpu'; } catch {} }
+        const opts = device === 'webgpu'
+          ? { device, dtype: { encoder_model: 'fp32', decoder_model_merged: 'q4' }, progress_callback }
+          : { device, dtype: 'q8', progress_callback };
+        try { asr = await pipeline('automatic-speech-recognition', id, opts); }
+        catch (e) {
+          if (device !== 'webgpu') throw e;
+          device = 'wasm';
+          asr = await pipeline('automatic-speech-recognition', id, { device, dtype: 'q8', progress_callback });
+        }
       }
       loaded = model;
-      postMessage({ type: 'ready', device });
     }
-    onmessage = async (e) => {
-      const m = e.data;
+    return async function handle(m) {
       try {
-        if (m.type === 'load') { await load(m.model); }
+        if (m.type === 'load') { await load(m.model, m.base); emit({ type: 'ready', device }); }
         else if (m.type === 'run') {
-          const out = await asr(m.audio, { language: 'sinhala', task: 'transcribe', return_timestamps: true,
-            no_repeat_ngram_size: 4 });
-          postMessage({ type: 'result', id: m.id, out });
+          const out = await asr(m.audio, { language: 'sinhala', task: 'transcribe', return_timestamps: !!m.timestamps, ...(m.timestamps ? { no_repeat_ngram_size: 4 } : {}) });
+          emit({ type: 'result', id: m.id, out });
         }
-      } catch (err) { postMessage({ type: 'error', message: String(err && err.message || err) }); }
+      } catch (err) { emit({ type: 'error', message: String(err && err.message || err) }); }
     };
+  }
+  const workerSrc = `
+    import * as lib from '${TRANSFORMERS_URL}';
+    const handle = (${createEngine.toString()})((d) => postMessage(d), lib);
+    onmessage = (e) => handle(e.data);
   `;
 
   function call(worker, msg, transfer) {
@@ -512,38 +599,18 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
   /* Same protocol as the worker, run on the page itself. Used when the page is opened
      as a local file (file://), where browsers refuse module workers. */
   function makeInlineWorker() {
-    const et = new EventTarget(); let asr = null, loaded = null, dead = false;
+    const et = new EventTarget(); let dead = false, handle = null;
     const emit = (data) => { if (!dead) setTimeout(() => et.dispatchEvent(new MessageEvent('message', { data })), 0); };
-    async function handle(m) {
-      try {
-        const { pipeline, env } = await import(TRANSFORMERS_URL);
-        env.allowLocalModels = false;
-        if (m.type === 'load') {
-          if (!(asr && loaded === m.model)) {
-            const files = {};
-            const progress_callback = (p) => {
-              if (p.status === 'progress' && p.total) { files[p.file] = [p.loaded, p.total];
-                let l = 0, t = 0; for (const k in files) { l += files[k][0]; t += files[k][1]; }
-                emit({ type: 'download', loaded: l, total: t }); }
-            };
-            let device = 'wasm';
-            if (navigator.gpu) { try { if (await navigator.gpu.requestAdapter()) device = 'webgpu'; } catch {} }
-            const opts = device === 'webgpu' ? { device, dtype: { encoder_model: 'fp32', decoder_model_merged: 'q4' }, progress_callback } : { device, dtype: 'q8', progress_callback };
-            try { asr = await pipeline('automatic-speech-recognition', m.model, opts); }
-            catch (e) { if (device !== 'webgpu') throw e; device = 'wasm'; asr = await pipeline('automatic-speech-recognition', m.model, { device, dtype: 'q8', progress_callback }); }
-            loaded = m.model; et.device = device;
-          }
-          emit({ type: 'ready', device: et.device });
-        } else if (m.type === 'run') {
-          const out = await asr(m.audio, { language: 'sinhala', task: 'transcribe', return_timestamps: true, no_repeat_ngram_size: 4 });
-          emit({ type: 'result', id: m.id, out });
-        }
-      } catch (err) { emit({ type: 'error', message: String(err && err.message || err) }); }
-    }
     return {
       inline: true,
       addEventListener: et.addEventListener.bind(et), removeEventListener: et.removeEventListener.bind(et),
-      postMessage: (m) => { setTimeout(() => handle(m), 0); }, terminate: () => { dead = true; },
+      postMessage: (m) => {
+        setTimeout(async () => {
+          try { if (!handle) handle = createEngine(emit, await import(TRANSFORMERS_URL)); handle(m); }
+          catch (err) { emit({ type: 'error', message: 'Could not load the speech engine: ' + (err.message || err) }); }
+        }, 0);
+      },
+      terminate: () => { dead = true; },
     };
   }
 
@@ -562,14 +629,16 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
     let w = state.worker;
     status('Loading model…', 5);
     let info;
-    try { info = await call(w, { type: 'load', model }); }
+    try { info = await call(w, { type: 'load', model, base: new URL('.', location.href).href }); }
     catch (e) {
       if (w.inline || !/Worker failed/.test(e.message)) throw e;
       w.terminate(); state.forceInline = true; w = state.worker = makeInlineWorker();
-      info = await call(w, { type: 'load', model });
+      info = await call(w, { type: 'load', model, base: new URL('.', location.href).href });
     }
     const device = info.device === 'webgpu' ? 'GPU' : 'CPU';
-    const windows = cutPoints(audio, 30, 6);
+    // Sinhala-trained models were fine-tuned without timestamps: use short windows cut at pauses instead.
+    const fineTuned = model.startsWith('local:');
+    const windows = fineTuned ? segmentSpeech(audio, 12) : cutPoints(audio, 30, 6);
     const t0 = performance.now();
     for (let i = 0; i < windows.length; i++) {
       if (state.cancel) return;
@@ -579,7 +648,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; }
       const eta = i ? Math.round(elapsed / i * (windows.length - i)) : null;
       status(`Transcribing on ${device} · part ${i + 1} of ${windows.length}${eta !== null ? ` · about ${eta}s left` : ''}`, 30 + 70 * i / windows.length);
       const slice = audio.slice(a, b);
-      const out = await call(w, { type: 'run', id: i, audio: slice }, [slice.buffer]);
+      const out = await call(w, { type: 'run', id: i, audio: slice, timestamps: !fineTuned }, [slice.buffer]);
       if (state.cancel) return;
       const chunks = (out && out.chunks && out.chunks.length) ? out.chunks : [{ timestamp: [0, winEnd - offset], text: out?.text || '' }];
       const fresh = [];
