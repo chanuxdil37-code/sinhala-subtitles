@@ -1,0 +1,10 @@
+{
+ "onnx/encoder_model_quantized.onnx": {
+  "parts": 3,
+  "size": 98090460
+ },
+ "onnx/decoder_model_merged_quantized.onnx": {
+  "parts": 5,
+  "size": 195141673
+ }
+}
