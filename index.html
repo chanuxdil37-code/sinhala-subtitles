@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="si">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sinhala Subtitle Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700&family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: two-pane studio — media + settings on the left, editable cue list on the right; stacks on phones. */
+:root {
+  --bg: #f3f5f2;
+  --panel: #ffffff;
+  --ink: #17201b;
+  --muted: #5d6b63;
+  --line: #d9e0db;
+  --accent: #b5462a;      /* lotus-red / kandyan lacquer */
+  --accent-ink: #ffffff;
+  --accent-soft: #f6e4dd;
+  --gold: #c99a2e;
+  --ok: #2f7a4f;
+  --warn: #a8641a;
+  --err: #b3261e;
+  --field: #f8faf8;
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-body: "Inter", "Noto Sans Sinhala", system-ui, sans-serif;
+  --font-si: "Noto Sans Sinhala", "Iskoola Pota", "Nirmala UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111613; --panel: #1a211d; --ink: #e7ece8; --muted: #9aa8a0; --line: #2c3631;
+    --accent: #e0714f; --accent-ink: #1a0d08; --accent-soft: #3a2119; --gold: #e0b555;
+    --ok: #6cc28f; --warn: #e3a35a; --err: #f08a80; --field: #141a17; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111613; --panel: #1a211d; --ink: #e7ece8; --muted: #9aa8a0; --line: #2c3631;
+  --accent: #e0714f; --accent-ink: #1a0d08; --accent-soft: #3a2119; --gold: #e0b555;
+  --ok: #6cc28f; --warn: #e3a35a; --err: #f08a80; --field: #141a17; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink); font: 14px/1.5 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1280px; margin: 0 auto; display: grid; gap: 20px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 20px; }
+h1 { font: 700 26px/1.1 var(--font-display); margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h1 .si { font-family: var(--font-si); color: var(--accent); font-weight: 700; margin-left: 6px; }
+header p { margin: 0; color: var(--muted); max-width: 60ch; }
+h2 { font: 600 12px/1 var(--font-body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; }
+
+.grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 20px; align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+.stack { display: grid; gap: 16px; }
+
+/* Drop zone */
+.drop {
+  border: 1.5px dashed var(--line); border-radius: 8px; padding: 22px 16px; text-align: center;
+  cursor: pointer; transition: border-color .15s, background .15s; background: var(--field);
+}
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop strong { display: block; font-size: 15px; }
+.drop span { color: var(--muted); font-size: 13px; }
+.drop input { display: none; }
+
+.player { position: relative; background: #000; border-radius: 8px; overflow: hidden; aspect-ratio: 16 / 9; max-width: 100%; }
+.player video, .player audio { width: 100%; height: 100%; display: block; }
+.player.audio-only { aspect-ratio: auto; background: var(--field); padding: 12px; }
+.player.audio-only audio { height: 40px; }
+.overlay {
+  position: absolute; left: 6%; right: 6%; bottom: 52px; text-align: center; pointer-events: none;
+  font: 600 clamp(15px, 2.6vw, 22px)/1.45 var(--font-si); color: #fff;
+  text-shadow: 0 0 4px #000, 0 0 2px #000, 1px 1px 2px #000;
+}
+.player.audio-only .overlay { position: static; color: var(--ink); text-shadow: none; min-height: 1.5em; margin-top: 8px; }
+.meta { color: var(--muted); font: 12px var(--font-mono); margin-top: 6px; overflow-wrap: anywhere; }
+
+/* Form */
+.field { display: grid; gap: 5px; }
+.field label, .lbl { font-weight: 600; font-size: 13px; }
+.hint { color: var(--muted); font-size: 12px; }
+select, input[type=text], input[type=password], input[type=number], textarea {
+  font: inherit; color: var(--ink); background: var(--field); border: 1px solid var(--line);
+  border-radius: 6px; padding: 8px 10px; width: 100%; min-width: 0;
+}
+select:focus, input:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: var(--field); color: var(--ink); padding: 10px 8px; font: 600 13px var(--font-body); cursor: pointer; text-align: left; }
+.seg button small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); box-shadow: inset 0 -3px 0 var(--accent); }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 420px) { .row2 { grid-template-columns: 1fr; } }
+
+.btn {
+  font: 600 14px var(--font-body); border-radius: 7px; padding: 10px 16px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+}
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.07); }
+.btn:disabled { opacity: .5; cursor: not-allowed; filter: none; }
+.btn.sm { padding: 6px 10px; font-size: 13px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Progress */
+.status { display: grid; gap: 6px; }
+.bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.status-text { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.status-text.err { color: var(--err); }
+.status-text.ok { color: var(--ok); }
+
+/* Cues */
+.cue-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.cue-head h2 { margin: 0; }
+.count { font: 500 12px var(--font-mono); color: var(--muted); }
+.cues { display: grid; gap: 8px; max-height: 70vh; overflow-y: auto; padding-right: 4px; }
+.cue {
+  display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 8px 10px; align-items: start;
+  padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--field);
+}
+.cue.active { border-color: var(--accent); background: var(--accent-soft); }
+.cue .n { font: 500 12px var(--font-mono); color: var(--muted); padding-top: 6px; text-align: right; }
+.cue .times { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
+.cue .times input { width: 118px; font: 12px var(--font-mono); padding: 4px 6px; }
+.cue .times .arrow { color: var(--muted); font-size: 12px; }
+.cue textarea { font: 16px/1.5 var(--font-si); resize: vertical; min-height: 44px; }
+.cue .tools { display: grid; gap: 4px; }
+.icon-btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; width: 32px; height: 30px; cursor: pointer; font-size: 13px; }
+.icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+.empty { text-align: center; padding: 40px 16px; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; }
+.empty .si { font: 600 18px var(--font-si); color: var(--ink); display: block; margin-bottom: 4px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--line); }
+.toolbar .field { width: 130px; }
+details summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+details[open] summary { margin-bottom: 10px; }
+.note { font-size: 12px; color: var(--muted); background: var(--field); border-radius: 6px; padding: 8px 10px; border: 1px solid var(--line); }
+.note b { color: var(--ink); }
+.burn { display: grid; gap: 10px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.burn h2 { margin: 0; }
+.burn .toolbar .field { width: 170px; }
+footer { color: var(--muted); font-size: 12px; text-align: center; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Sinhala Subtitle Studio <span class="si">උපසිරැසි</span></h1>
+    <p>Upload a video or audio file, generate Sinhala subtitles, fix the text, and download an .srt or .vtt file.</p>
+  </header>
+
+  <div class="grid">
+    <!-- LEFT: media + settings -->
+    <div class="stack">
+      <section class="panel stack">
+        <h2>1 · Media</h2>
+        <label class="drop" id="drop">
+          <input type="file" id="file" accept="video/*,audio/*">
+          <strong>Choose a video or audio file</strong>
+          <span>or drop it here · MP4, MKV, WEBM, MP3, WAV, M4A</span>
+        </label>
+        <div id="playerBox" hidden>
+          <div class="player" id="player">
+            <div class="overlay" id="overlay"></div>
+          </div>
+          <div class="meta" id="meta"></div>
+        </div>
+      </section>
+
+      <section class="panel stack">
+        <h2>2 · Engine</h2>
+        <div class="seg" role="group" aria-label="Transcription engine">
+          <button type="button" id="engWhisper" aria-pressed="true">Whisper (in browser)<small>Free, private, offline after first download</small></button>
+          <button type="button" id="engGemini" aria-pressed="false">Gemini API<small>Better Sinhala accuracy, needs a free API key</small></button>
+        </div>
+
+        <div id="whisperOpts" class="stack">
+          <div class="field">
+            <label for="model">Model</label>
+            <select id="model">
+              <option value="onnx-community/whisper-tiny">Tiny · ~40 MB · fastest, rough</option>
+              <option value="onnx-community/whisper-base" selected>Base · ~80 MB · fast</option>
+              <option value="onnx-community/whisper-small">Small · ~250 MB · better</option>
+              <option value="onnx-community/whisper-large-v3-turbo">Large v3 Turbo · ~800 MB · best, needs WebGPU</option>
+              <option value="custom">Custom Hugging Face model…</option>
+            </select>
+          </div>
+          <div class="field" id="customBox" hidden>
+            <label for="customModel">Model ID (ONNX, transformers.js compatible)</label>
+            <input type="text" id="customModel" placeholder="e.g. your-name/whisper-small-sinhala-onnx">
+          </div>
+          <div class="note">Whisper's Sinhala accuracy is limited, especially on the small models. Expect to edit the text. The model downloads once and is cached by the browser.</div>
+        </div>
+
+        <div id="geminiOpts" class="stack" hidden>
+          <div class="field">
+            <label for="apiKey">Gemini API key</label>
+            <input type="password" id="apiKey" autocomplete="off" placeholder="AIza…">
+            <span class="hint">Get one free at aistudio.google.com/apikey. Stored only in this browser.</span>
+          </div>
+          <div class="row2">
+            <div class="field">
+              <label for="gModel">Model</label>
+              <input type="text" id="gModel" value="gemini-2.5-flash">
+            </div>
+            <div class="field">
+              <label for="gMode">Audio language</label>
+              <select id="gMode">
+                <option value="transcribe">Sinhala → transcribe</option>
+                <option value="translate">Other language → translate to Sinhala</option>
+              </select>
+            </div>
+          </div>
+          <div class="note">Audio is sent to Google in 5-minute pieces. Timestamps from Gemini are approximate; nudge them in the editor if needed.</div>
+        </div>
+
+        <details>
+          <summary>Subtitle settings</summary>
+          <div class="row2">
+            <div class="field">
+              <label for="maxChars">Max characters per subtitle</label>
+              <input type="number" id="maxChars" value="60" min="15" max="200">
+            </div>
+            <div class="field">
+              <label for="minDur">Minimum duration (s)</label>
+              <input type="number" id="minDur" value="1.2" min="0.3" max="5" step="0.1">
+            </div>
+          </div>
+        </details>
+
+        <div class="actions">
+          <button class="btn primary" id="go" disabled>Generate subtitles</button>
+          <button class="btn" id="stop" hidden>Stop</button>
+        </div>
+        <div class="status" id="statusBox" hidden>
+          <div class="bar"><i id="barFill"></i></div>
+          <div class="status-text" id="statusText"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- RIGHT: editor -->
+    <section class="panel">
+      <div class="cue-head">
+        <h2>3 · Edit &amp; export</h2>
+        <span class="count" id="count">0 lines</span>
+      </div>
+      <div class="cues" id="cues"></div>
+      <div class="empty" id="empty">
+        <span class="si">උපසිරැසි මෙහි දිස්වේ</span>
+        Subtitles appear here as they are generated. You can also import an existing .srt to edit it.
+      </div>
+      <div class="toolbar">
+        <button class="btn sm" id="addCue">+ Add line</button>
+        <label class="btn sm" for="importSrt" style="display:inline-flex;align-items:center">Import .srt<input type="file" id="importSrt" accept=".srt,.vtt,text/plain" hidden></label>
+        <div class="field">
+          <label for="shift" class="hint">Shift all (seconds)</label>
+          <div style="display:flex;gap:6px"><input type="number" id="shift" value="0" step="0.1"><button class="btn sm" id="applyShift">Apply</button></div>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="btn primary sm" id="dlSrt">Download .srt</button>
+        <button class="btn sm" id="dlVtt">Download .vtt</button>
+        <button class="btn sm" id="dlTxt">Download text</button>
+        <button class="btn sm" id="copySrt">Copy SRT</button>
+        <button class="btn sm" id="clearAll">Clear</button>
+      </div>
+      <div class="burn" id="burnBox">
+        <h2>4 · Burn subtitles into the video</h2>
+        <p class="hint" style="margin:0">Makes a new video with the Sinhala text drawn on every frame, for Facebook, TikTok or WhatsApp. It plays the video once in real time, so a 5-minute video takes about 5 minutes. Keep this tab open and visible.</p>
+        <div class="toolbar" style="border:0;margin:0;padding:0">
+          <div class="field">
+            <label for="burnSize" class="hint">Text size</label>
+            <select id="burnSize"><option value="0.045">Small</option><option value="0.058" selected>Medium</option><option value="0.072">Large</option></select>
+          </div>
+          <div class="field">
+            <label for="burnStyle" class="hint">Style</label>
+            <select id="burnStyle"><option value="outline" selected>White, black outline</option><option value="box">White on dark box</option><option value="yellow">Yellow, black outline</option></select>
+          </div>
+          <button class="btn primary sm" id="burnGo">Make video</button>
+          <button class="btn sm" id="burnStop" hidden>Stop</button>
+        </div>
+        <div class="status" id="burnStatus" hidden>
+          <div class="bar"><i id="burnFill"></i></div>
+          <div class="status-text" id="burnText"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer>Runs in your browser. Whisper models from Hugging Face via transformers.js.</footer>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const SR = 16000;
+  const TRANSFORMERS_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.6';
+
+  const state = { file: null, audio: null, cues: [], engine: 'whisper', running: false, cancel: false, worker: null, mediaEl: null };
+
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  };
+
+  /* ---------- time helpers ---------- */
+  function fmt(t, sep = ',') {
+    if (!isFinite(t) || t < 0) t = 0;
+    const ms = Math.round(t * 1000);
+    const h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, s = Math.floor(ms / 1000) % 60, r = ms % 1000;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}${sep}${String(r).padStart(3, '0')}`;
+  }
+  function parseTime(str) {
+    const m = String(str).trim().match(/^(?:(\d+):)?(\d{1,2}):(\d{1,2})(?:[.,](\d{1,3}))?$/);
+    if (!m) { const n = parseFloat(str); return isFinite(n) ? n : null; }
+    return (+(m[1] || 0)) * 3600 + (+m[2]) * 60 + (+m[3]) + (m[4] ? +m[4].padEnd(3, '0') / 1000 : 0);
+  }
+
+  /* ---------- status ---------- */
+  function status(text, pct = null, kind = '') {
+    $('statusBox').hidden = false;
+    const t = $('statusText'); t.textContent = text; t.className = 'status-text ' + kind;
+    if (pct !== null) $('barFill').style.width = Math.max(0, Math.min(100, pct)) + '%';
+  }
+
+  /* ---------- media ---------- */
+  const drop = $('drop');
+  ['dragover', 'dragenter'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(e => drop.addEventListener(e, () => drop.classList.remove('over')));
+  drop.addEventListener('drop', ev => { ev.preventDefault(); const f = ev.dataTransfer.files[0]; if (f) loadFile(f); });
+  $('file').addEventListener('change', e => { const f = e.target.files[0]; if (f) loadFile(f); });
+
+  async function loadFile(file) {
+    state.file = file; state.audio = null;
+    const player = $('player');
+    if (state.mediaEl) { URL.revokeObjectURL(state.mediaEl.src); state.mediaEl.remove(); }
+    const isAudio = file.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac|opus)$/i.test(file.name);
+    const el = document.createElement(isAudio ? 'audio' : 'video');
+    el.controls = true; el.playsInline = true; el.src = URL.createObjectURL(file);
+    player.classList.toggle('audio-only', isAudio);
+    player.insertBefore(el, $('overlay'));
+    el.addEventListener('timeupdate', onTime);
+    el.addEventListener('seeked', onTime);
+    state.mediaEl = el;
+    $('playerBox').hidden = false;
+    $('meta').textContent = `${file.name} · ${(file.size / 1048576).toFixed(1)} MB`;
+    $('go').disabled = false;
+    status('Ready. Press “Generate subtitles”.', 0);
+  }
+
+  async function decodeAudio() {
+    if (state.audio) return state.audio;
+    status('Extracting audio…', 2);
+    const buf = await state.file.arrayBuffer();
+    let ctx;
+    try { ctx = new AudioContext({ sampleRate: SR }); } catch { ctx = new AudioContext(); }
+    let decoded;
+    try { decoded = await ctx.decodeAudioData(buf); }
+    catch { throw new Error('This browser could not read the audio in that file. Try converting it to MP4 or MP3, or use Chrome.'); }
+    finally { ctx.close?.(); }
+    let mono = mixMono(decoded);
+    if (decoded.sampleRate !== SR) mono = await resample(mono, decoded.sampleRate);
+    state.audio = mono;
+    $('meta').textContent += ` · ${fmt(mono.length / SR, '.').slice(0, 8)} audio`;
+    return mono;
+  }
+  function mixMono(ab) {
+    const out = new Float32Array(ab.length);
+    for (let c = 0; c < ab.numberOfChannels; c++) { const d = ab.getChannelData(c); for (let i = 0; i < d.length; i++) out[i] += d[i] / ab.numberOfChannels; }
+    return out;
+  }
+  async function resample(data, rate) {
+    const len = Math.ceil(data.length * SR / rate);
+    const off = new OfflineAudioContext(1, len, SR);
+    const b = off.createBuffer(1, data.length, rate); b.copyToChannel(data, 0);
+    const s = off.createBufferSource(); s.buffer = b; s.connect(off.destination); s.start();
+    return (await off.startRendering()).getChannelData(0);
+  }
+
+  /* Pick a quiet place to cut, so words are not split across windows. */
+  function cutPoints(audio, maxLen, searchBack) {
+    const pts = []; let start = 0; const total = audio.length; const frame = Math.round(0.05 * SR);
+    while (start < total) {
+      let end = Math.min(start + maxLen * SR, total);
+      if (end < total) {
+        const from = Math.max(start + (maxLen - searchBack) * SR, start + SR);
+        let best = end, bestE = Infinity;
+        for (let p = from; p + frame <= end; p += frame) {
+          let e = 0; for (let i = p; i < p + frame; i++) e += audio[i] * audio[i];
+          if (e < bestE) { bestE = e; best = p + (frame >> 1); }
+        }
+        end = best;
+      }
+      pts.push([start, end]); start = end;
+    }
+    return pts;
+  }
+
+  /* ---------- engine switch ---------- */
+  function setEngine(e) {
+    state.engine = e;
+    $('engWhisper').setAttribute('aria-pressed', e === 'whisper');
+    $('engGemini').setAttribute('aria-pressed', e === 'gemini');
+    $('whisperOpts').hidden = e !== 'whisper';
+    $('geminiOpts').hidden = e !== 'gemini';
+    store.set('sss-engine', e);
+  }
+  $('engWhisper').onclick = () => setEngine('whisper');
+  $('engGemini').onclick = () => setEngine('gemini');
+  $('model').onchange = () => { $('customBox').hidden = $('model').value !== 'custom'; store.set('sss-model', $('model').value); };
+  $('apiKey').addEventListener('change', () => store.set('sss-key', $('apiKey').value.trim()));
+  $('gModel').addEventListener('change', () => store.set('sss-gmodel', $('gModel').value.trim()));
+  // restore prefs
+  if (store.get('sss-key')) $('apiKey').value = store.get('sss-key');
+  if (store.get('sss-gmodel')) $('gModel').value = store.get('sss-gmodel');
+  if (store.get('sss-model')) { $('model').value = store.get('sss-model'); $('customBox').hidden = $('model').value !== 'custom'; }
+  setEngine(store.get('sss-engine') === 'gemini' ? 'gemini' : 'whisper');
+
+  /* ---------- run ---------- */
+  $('go').onclick = async () => {
+    if (state.running) return;
+    state.running = true; state.cancel = false;
+    $('go').disabled = true; $('stop').hidden = false;
+    try {
+      const audio = await decodeAudio();
+      if (state.cues.length) state.cues = [];
+      renderCues();
+      if (state.engine === 'whisper') await runWhisper(audio);
+      else await runGemini(audio);
+      if (!state.cancel) status(`Done · ${state.cues.length} subtitle lines. Review the text, then download.`, 100, 'ok');
+    } catch (err) {
+      console.error(err);
+      status(err.message || String(err), null, 'err');
+    } finally {
+      state.running = false; $('go').disabled = false; $('stop').hidden = true;
+    }
+  };
+  $('stop').onclick = () => {
+    state.cancel = true;
+    if (state.worker) { state.worker.terminate(); state.worker = null; }
+    status(`Stopped · kept ${state.cues.length} lines.`, null);
+  };
+
+  /* ---------- Whisper (transformers.js in a worker) ---------- */
+  const workerSrc = `
+    import { pipeline, env } from '${TRANSFORMERS_URL}';
+    env.allowLocalModels = false;
+    let asr = null, loaded = null;
+    async function load(model) {
+      if (asr && loaded === model) return;
+      const files = {};
+      const progress_callback = (p) => {
+        if (p.status === 'progress' && p.total) { files[p.file] = [p.loaded, p.total];
+          let l = 0, t = 0; for (const k in files) { l += files[k][0]; t += files[k][1]; }
+          postMessage({ type: 'download', loaded: l, total: t });
+        }
+      };
+      let device = 'wasm';
+      if (self.navigator && navigator.gpu) { try { const a = await navigator.gpu.requestAdapter(); if (a) device = 'webgpu'; } catch {} }
+      const opts = device === 'webgpu'
+        ? { device, dtype: { encoder_model: 'fp32', decoder_model_merged: 'q4' }, progress_callback }
+        : { device, dtype: 'q8', progress_callback };
+      try { asr = await pipeline('automatic-speech-recognition', model, opts); }
+      catch (e) {
+        if (device !== 'webgpu') throw e;
+        device = 'wasm';
+        asr = await pipeline('automatic-speech-recognition', model, { device, dtype: 'q8', progress_callback });
+      }
+      loaded = model;
+      postMessage({ type: 'ready', device });
+    }
+    onmessage = async (e) => {
+      const m = e.data;
+      try {
+        if (m.type === 'load') { await load(m.model); }
+        else if (m.type === 'run') {
+          const out = await asr(m.audio, { language: 'sinhala', task: 'transcribe', return_timestamps: true,
+            no_repeat_ngram_size: 4 });
+          postMessage({ type: 'result', id: m.id, out });
+        }
+      } catch (err) { postMessage({ type: 'error', message: String(err && err.message || err) }); }
+    };
+  `;
+
+  function call(worker, msg, transfer) {
+    return new Promise((resolve, reject) => {
+      const h = (e) => {
+        const d = e.data;
+        if (d.type === 'download') status(`Downloading model… ${(d.loaded / 1048576).toFixed(0)} / ${(d.total / 1048576).toFixed(0)} MB (one-time)`, 5 + 25 * d.loaded / d.total);
+        else if (d.type === 'error') { worker.removeEventListener('message', h); reject(new Error('Whisper error: ' + d.message)); }
+        else if (d.type === 'ready' && msg.type === 'load') { worker.removeEventListener('message', h); resolve(d); }
+        else if (d.type === 'result' && d.id === msg.id) { worker.removeEventListener('message', h); resolve(d.out); }
+      };
+      worker.addEventListener('message', h);
+      worker.addEventListener('error', (e) => reject(new Error('Worker failed to start: ' + (e.message || 'check your connection'))), { once: true });
+      worker.postMessage(msg, transfer || []);
+    });
+  }
+
+  async function runWhisper(audio) {
+    let model = $('model').value;
+    if (model === 'custom') { model = $('customModel').value.trim(); if (!model) throw new Error('Enter a custom model ID first.'); }
+    if (!state.worker || state.workerModel !== model) {
+      if (state.worker) state.worker.terminate();
+      const url = URL.createObjectURL(new Blob([workerSrc], { type: 'text/javascript' }));
+      state.worker = new Worker(url, { type: 'module' }); state.workerModel = model;
+    }
+    const w = state.worker;
+    status('Loading model…', 5);
+    const info = await call(w, { type: 'load', model });
+    const device = info.device === 'webgpu' ? 'GPU' : 'CPU';
+    const windows = cutPoints(audio, 30, 6);
+    const t0 = performance.now();
+    for (let i = 0; i < windows.length; i++) {
+      if (state.cancel) return;
+      const [a, b] = windows[i];
+      const offset = a / SR, winEnd = b / SR;
+      const elapsed = (performance.now() - t0) / 1000;
+      const eta = i ? Math.round(elapsed / i * (windows.length - i)) : null;
+      status(`Transcribing on ${device} · part ${i + 1} of ${windows.length}${eta !== null ? ` · about ${eta}s left` : ''}`, 30 + 70 * i / windows.length);
+      const slice = audio.slice(a, b);
+      const out = await call(w, { type: 'run', id: i, audio: slice }, [slice.buffer]);
+      if (state.cancel) return;
+      const chunks = (out && out.chunks && out.chunks.length) ? out.chunks : [{ timestamp: [0, winEnd - offset], text: out?.text || '' }];
+      const fresh = [];
+      for (const c of chunks) {
+        let [s, e] = c.timestamp || [0, null];
+        s = (s ?? 0) + offset; e = (e ?? (winEnd - offset)) + offset;
+        if (e > winEnd + 0.5) e = winEnd;
+        fresh.push({ start: s, end: Math.max(e, s + 0.3), text: (c.text || '').trim() });
+      }
+      addCues(fresh);
+    }
+  }
+
+  /* ---------- Gemini ---------- */
+  function encodeWav(samples) {
+    const buf = new ArrayBuffer(44 + samples.length * 2); const v = new DataView(buf);
+    const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    w(0, 'RIFF'); v.setUint32(4, 36 + samples.length * 2, true); w(8, 'WAVE'); w(12, 'fmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, SR, true);
+    v.setUint32(28, SR * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, samples.length * 2, true);
+    for (let i = 0, o = 44; i < samples.length; i++, o += 2) { const s = Math.max(-1, Math.min(1, samples[i])); v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true); }
+    return buf;
+  }
+  function b64(buf) {
+    const bytes = new Uint8Array(buf); let s = ''; const step = 0x8000;
+    for (let i = 0; i < bytes.length; i += step) s += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
+    return btoa(s);
+  }
+
+  async function runGemini(audio) {
+    const key = $('apiKey').value.trim();
+    if (!key) throw new Error('Paste your Gemini API key first (free at aistudio.google.com/apikey).');
+    store.set('sss-key', key);
+    const model = $('gModel').value.trim() || 'gemini-2.5-flash';
+    const translate = $('gMode').value === 'translate';
+    const windows = cutPoints(audio, 300, 20);
+    for (let i = 0; i < windows.length; i++) {
+      if (state.cancel) return;
+      const [a, b] = windows[i]; const offset = a / SR, dur = (b - a) / SR;
+      status(`Sending part ${i + 1} of ${windows.length} to Gemini…`, 5 + 95 * i / windows.length);
+      const data = b64(encodeWav(audio.subarray(a, b)));
+      const prompt = (translate
+        ? 'Listen to this audio. Translate everything that is spoken into natural, fluent Sinhala (සිංහල) and write subtitles in Sinhala script.'
+        : 'Transcribe this Sinhala audio exactly as spoken, in Sinhala script (සිංහල අකුරු). Keep English words that are spoken in English as English.')
+        + ` The clip is ${dur.toFixed(1)} seconds long. Split the speech into short subtitle lines of at most about ${+$('maxChars').value || 60} characters, each matching one phrase or sentence.`
+        + ' Return a JSON array only, each item {"start": seconds, "end": seconds, "text": string}, with start/end as numbers in seconds from the beginning of this clip, in order and not overlapping.'
+        + ' Skip music and silence. If nothing is spoken, return [].';
+      const body = {
+        contents: [{ role: 'user', parts: [{ inline_data: { mime_type: 'audio/wav', data } }, { text: prompt }] }],
+        generationConfig: { temperature: 0.1, responseMimeType: 'application/json' },
+      };
+      let res, json;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body),
+        });
+        json = await res.json().catch(() => ({}));
+        if (res.ok || ![429, 500, 503].includes(res.status)) break;
+        status(`Gemini is busy, retrying part ${i + 1}…`, null);
+        await new Promise(r => setTimeout(r, 4000 * (attempt + 1)));
+      }
+      if (!res.ok) throw new Error(`Gemini error ${res.status}: ${json?.error?.message || 'request failed'}`);
+      const text = json?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '[]';
+      let items;
+      try { items = JSON.parse(text.replace(/^```(?:json)?|```$/g, '').trim()); } catch { items = []; }
+      if (!Array.isArray(items)) items = items.subtitles || items.items || [];
+      addCues(items.map(it => {
+        const s = typeof it.start === 'number' ? it.start : parseTime(it.start) ?? 0;
+        const e = typeof it.end === 'number' ? it.end : parseTime(it.end) ?? s + 2;
+        return { start: Math.min(s, dur) + offset, end: Math.min(Math.max(e, s + 0.3), dur) + offset, text: String(it.text || '').trim() };
+      }));
+    }
+  }
+
+  /* ---------- cue post-processing ---------- */
+  function splitLong(c, max) {
+    if (c.text.length <= max) return [c];
+    const words = c.text.split(/\s+/); const parts = []; let cur = '';
+    for (const wd of words) { if (cur && (cur + ' ' + wd).length > max) { parts.push(cur); cur = wd; } else cur = cur ? cur + ' ' + wd : wd; }
+    if (cur) parts.push(cur);
+    const total = parts.reduce((n, p) => n + p.length, 0) || 1; const span = c.end - c.start; let t = c.start;
+    return parts.map(p => { const d = span * p.length / total; const r = { start: t, end: t + d, text: p }; t += d; return r; });
+  }
+  function isJunk(t) {
+    if (!t) return true;
+    if (/^[\s\.\,\-\!\?\[\]\(\)♪]*$/.test(t)) return true;
+    if (/^\s*[\[\(][^\]\)]*[\]\)]\s*$/.test(t)) return true; // "[Music]", "(applause)"
+    return false;
+  }
+  function addCues(list) {
+    const max = Math.max(15, +$('maxChars').value || 60), minDur = Math.max(0.3, +$('minDur').value || 1.2);
+    for (const c of list) {
+      if (isJunk(c.text)) continue;
+      const prev = state.cues[state.cues.length - 1];
+      if (prev && prev.text === c.text && c.start - prev.end < 1) { prev.end = Math.max(prev.end, c.end); continue; } // repeated hallucination
+      for (const p of splitLong(c, max)) {
+        if (p.end - p.start < minDur) p.end = p.start + minDur;
+        state.cues.push(p);
+      }
+    }
+    fixOverlaps();
+    renderCues(true);
+  }
+  function fixOverlaps() {
+    state.cues.sort((a, b) => a.start - b.start);
+    for (let i = 0; i < state.cues.length - 1; i++) {
+      const a = state.cues[i], b = state.cues[i + 1];
+      if (a.end > b.start) a.end = Math.max(a.start + 0.2, b.start - 0.02);
+    }
+  }
+
+  /* ---------- editor ---------- */
+  function renderCues(scrollToEnd) {
+    const box = $('cues'); box.textContent = '';
+    $('empty').hidden = state.cues.length > 0;
+    $('count').textContent = `${state.cues.length} line${state.cues.length === 1 ? '' : 's'}`;
+    const frag = document.createDocumentFragment();
+    state.cues.forEach((c, i) => {
+      const row = document.createElement('div'); row.className = 'cue'; row.dataset.i = i;
+      row.innerHTML = `
+        <div class="n">${i + 1}</div>
+        <div style="min-width:0">
+          <div class="times">
+            <input type="text" id="s${i}" aria-label="Start time" value="${fmt(c.start)}">
+            <span class="arrow">→</span>
+            <input type="text" id="e${i}" aria-label="End time" value="${fmt(c.end)}">
+          </div>
+          <textarea id="t${i}" rows="2" aria-label="Subtitle text"></textarea>
+        </div>
+        <div class="tools">
+          <button class="icon-btn" data-act="play" title="Play this line" aria-label="Play this line">▶</button>
+          <button class="icon-btn" data-act="merge" title="Merge with next line" aria-label="Merge with next line">⤓</button>
+          <button class="icon-btn" data-act="del" title="Delete line" aria-label="Delete line">✕</button>
+        </div>`;
+      row.querySelector('textarea').value = c.text;
+      frag.appendChild(row);
+    });
+    box.appendChild(frag);
+    if (scrollToEnd) box.scrollTop = box.scrollHeight;
+    onTime();
+  }
+  $('cues').addEventListener('input', (e) => {
+    const row = e.target.closest('.cue'); if (!row) return; const c = state.cues[+row.dataset.i];
+    if (e.target.tagName === 'TEXTAREA') c.text = e.target.value;
+  });
+  $('cues').addEventListener('change', (e) => {
+    const row = e.target.closest('.cue'); if (!row) return; const c = state.cues[+row.dataset.i];
+    if (e.target.tagName !== 'INPUT') return;
+    const t = parseTime(e.target.value);
+    if (t === null) { e.target.value = fmt(e.target.id.startsWith('s') ? c.start : c.end); return; }
+    if (e.target.id.startsWith('s')) c.start = t; else c.end = t;
+    e.target.value = fmt(t);
+  });
+  $('cues').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-act]'); if (!btn) return;
+    const i = +btn.closest('.cue').dataset.i; const c = state.cues[i];
+    if (btn.dataset.act === 'play') { if (state.mediaEl) { state.mediaEl.currentTime = c.start; state.mediaEl.play().catch(() => {}); } }
+    if (btn.dataset.act === 'del') { state.cues.splice(i, 1); renderCues(); }
+    if (btn.dataset.act === 'merge' && state.cues[i + 1]) { const n = state.cues[i + 1]; c.text = (c.text + ' ' + n.text).trim(); c.end = n.end; state.cues.splice(i + 1, 1); renderCues(); }
+  });
+  $('addCue').onclick = () => {
+    const t = state.mediaEl ? state.mediaEl.currentTime : (state.cues.at(-1)?.end || 0);
+    state.cues.push({ start: t, end: t + 2, text: '' }); fixOverlaps(); renderCues();
+    const idx = state.cues.findIndex(c => c.start === t && c.text === ''); $('t' + idx)?.focus();
+  };
+  $('applyShift').onclick = () => {
+    const d = parseFloat($('shift').value) || 0; if (!d) return;
+    state.cues.forEach(c => { c.start = Math.max(0, c.start + d); c.end = Math.max(c.start + 0.2, c.end + d); });
+    renderCues();
+  };
+  $('clearAll').onclick = (e) => {
+    const b = e.currentTarget;
+    if (b.dataset.confirm) { state.cues = []; renderCues(); b.textContent = 'Clear'; delete b.dataset.confirm; return; }
+    b.dataset.confirm = '1'; b.textContent = 'Click again to clear';
+    setTimeout(() => { b.textContent = 'Clear'; delete b.dataset.confirm; }, 3000);
+  };
+
+  let lastActive = -1;
+  function onTime() {
+    const t = state.mediaEl ? state.mediaEl.currentTime : -1;
+    const idx = state.cues.findIndex(c => t >= c.start && t <= c.end);
+    $('overlay').textContent = idx >= 0 ? state.cues[idx].text : '';
+    if (idx !== lastActive) {
+      document.querySelectorAll('.cue.active').forEach(r => r.classList.remove('active'));
+      const row = document.querySelector(`.cue[data-i="${idx}"]`);
+      if (row) { row.classList.add('active'); if (state.mediaEl && !state.mediaEl.paused) row.scrollIntoView({ block: 'nearest' }); }
+      lastActive = idx;
+    }
+  }
+
+  /* ---------- import / export ---------- */
+  function toSrt() { return state.cues.map((c, i) => `${i + 1}\n${fmt(c.start)} --> ${fmt(c.end)}\n${c.text.trim()}\n`).join('\n'); }
+  function toVtt() { return 'WEBVTT\n\n' + state.cues.map((c, i) => `${i + 1}\n${fmt(c.start, '.')} --> ${fmt(c.end, '.')}\n${c.text.trim()}\n`).join('\n'); }
+  function baseName() { return (state.file?.name || 'subtitles').replace(/\.[^.]+$/, '') + '.si'; }
+  function download(text, name, type) {
+    if (!state.cues.length) { status('There are no subtitles to download yet.', null, 'err'); return; }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['﻿' + text], { type: type + ';charset=utf-8' }));
+    a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+  $('dlSrt').onclick = () => download(toSrt(), baseName() + '.srt', 'application/x-subrip');
+  $('dlVtt').onclick = () => download(toVtt(), baseName() + '.vtt', 'text/vtt');
+  $('dlTxt').onclick = () => download(state.cues.map(c => c.text).join('\n'), baseName() + '.txt', 'text/plain');
+  $('copySrt').onclick = async (e) => {
+    const b = e.currentTarget;
+    try { await navigator.clipboard.writeText(toSrt()); b.textContent = 'Copied'; }
+    catch { b.textContent = 'Copy failed'; }
+    setTimeout(() => (b.textContent = 'Copy SRT'), 1500);
+  };
+  $('importSrt').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const txt = (await f.text()).replace(/\r/g, '');
+    const out = [];
+    for (const block of txt.split(/\n{2,}/)) {
+      const lines = block.split('\n'); const ti = lines.findIndex(l => l.includes('-->')); if (ti < 0) continue;
+      const [s, en] = lines[ti].split('-->').map(x => parseTime(x.trim().split(' ')[0]));
+      if (s === null || en === null) continue;
+      out.push({ start: s, end: en, text: lines.slice(ti + 1).join('\n').trim() });
+    }
+    state.cues = out; fixOverlaps(); renderCues(); e.target.value = '';
+    status(`Imported ${out.length} lines from ${f.name}.`, null, 'ok');
+  });
+
+  /* ---------- burn-in (canvas + MediaRecorder; the browser shapes Sinhala text correctly) ---------- */
+  const burn = { rec: null, video: null, stop: false };
+  function burnStatus(text, pct, kind = '') {
+    $('burnStatus').hidden = false; const t = $('burnText'); t.textContent = text; t.className = 'status-text ' + kind;
+    if (pct != null) $('burnFill').style.width = Math.max(0, Math.min(100, pct)) + '%';
+  }
+  function pickMime() {
+    const list = ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4',
+      'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+    return list.find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || '';
+  }
+  function wrapLines(ctx, text, maxW) {
+    const out = [];
+    for (const para of text.split('\n')) {
+      let line = '';
+      for (const w of para.split(/\s+/).filter(Boolean)) {
+        const test = line ? line + ' ' + w : w;
+        if (line && ctx.measureText(test).width > maxW) { out.push(line); line = w; } else line = test;
+      }
+      if (line) out.push(line);
+    }
+    return out;
+  }
+  function drawSub(ctx, W, H, text, sizeK, style) {
+    if (!text) return;
+    const fs = Math.round(Math.min(H, W * 0.75) * sizeK);
+    ctx.font = `600 ${fs}px "Noto Sans Sinhala", "Iskoola Pota", "Nirmala UI", sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round';
+    const lines = wrapLines(ctx, text, W * 0.88);
+    const lh = fs * 1.42, bottom = H - H * 0.07;
+    lines.forEach((ln, i) => {
+      const y = bottom - (lines.length - 1 - i) * lh;
+      if (style === 'box') {
+        const w = ctx.measureText(ln).width + fs * 0.7;
+        ctx.fillStyle = 'rgba(0,0,0,0.72)';
+        ctx.fillRect(W / 2 - w / 2, y - fs * 1.05, w, lh);
+        ctx.fillStyle = '#fff'; ctx.fillText(ln, W / 2, y);
+      } else {
+        ctx.strokeStyle = '#000'; ctx.lineWidth = Math.max(2, fs * 0.16); ctx.strokeText(ln, W / 2, y);
+        ctx.fillStyle = style === 'yellow' ? '#ffd83b' : '#fff'; ctx.fillText(ln, W / 2, y);
+      }
+    });
+  }
+
+  $('burnGo').onclick = async () => {
+    if (!state.file) { burnStatus('Choose a video file first.', null, 'err'); return; }
+    if (state.mediaEl?.tagName !== 'VIDEO') { burnStatus('Burning needs a video file. For audio, download the .srt instead.', null, 'err'); return; }
+    if (!state.cues.length) { burnStatus('Generate or import subtitles first.', null, 'err'); return; }
+    const mime = pickMime();
+    if (!mime) { burnStatus('This browser cannot record video. Use Chrome or Edge on a computer.', null, 'err'); return; }
+    state.mediaEl.pause();
+    $('burnGo').disabled = true; $('burnStop').hidden = false; burn.stop = false;
+    try {
+      await document.fonts.load('600 40px "Noto Sans Sinhala"', 'සිංහල').catch(() => {});
+      const v = document.createElement('video');
+      v.src = state.mediaEl.src; v.playsInline = true; v.preload = 'auto';
+      burn.video = v;
+      await new Promise((res, rej) => { v.onloadedmetadata = res; v.onerror = () => rej(new Error('Could not open the video for burning.')); });
+      let W = v.videoWidth, H = v.videoHeight;
+      const scale = Math.min(1, 1920 / Math.max(W, H)); W = Math.round(W * scale / 2) * 2; H = Math.round(H * scale / 2) * 2;
+      const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      const stream = canvas.captureStream(30);
+      let actx = null;
+      try {
+        actx = new AudioContext();
+        const src = actx.createMediaElementSource(v); const dest = actx.createMediaStreamDestination();
+        src.connect(dest); await actx.resume();
+        dest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+      } catch (e) { console.warn('No audio track', e); }
+      const chunks = [];
+      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: Math.round(Math.max(2.5e6, W * H * 30 * 0.12)), audioBitsPerSecond: 160000 });
+      burn.rec = rec;
+      rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+      const done = new Promise(res => { rec.onstop = res; });
+      const sizeK = +$('burnSize').value, style = $('burnStyle').value, dur = v.duration;
+      const t0 = performance.now();
+      const draw = () => {
+        ctx.drawImage(v, 0, 0, W, H);
+        const t = v.currentTime; const c = state.cues.find(c => t >= c.start && t <= c.end);
+        drawSub(ctx, W, H, c ? c.text.trim() : '', sizeK, style);
+        const el = (performance.now() - t0) / 1000;
+        burnStatus(`Recording… ${fmt(t, '.').slice(3, 8)} of ${fmt(dur, '.').slice(3, 8)} · keep this tab visible`, 100 * t / dur);
+        if (!v.paused && !v.ended) schedule();
+      };
+      const schedule = () => v.requestVideoFrameCallback ? v.requestVideoFrameCallback(draw) : requestAnimationFrame(draw);
+      v.onended = () => { setTimeout(() => rec.state !== 'inactive' && rec.stop(), 300); };
+      rec.start(1000);
+      await v.play();
+      schedule();
+      await done;
+      actx?.close?.();
+      if (burn.stop) { burnStatus('Stopped. No video was saved.', null); return; }
+      const ext = mime.startsWith('video/mp4') ? 'mp4' : 'webm';
+      const blob = new Blob(chunks, { type: mime.split(';')[0] });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = (state.file.name.replace(/\.[^.]+$/, '')) + '.si-subtitled.' + ext;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+      burnStatus(`Saved ${a.download} (${(blob.size / 1048576).toFixed(1)} MB).${ext === 'webm' ? ' WebM plays in Chrome and VLC; upload sites accept it too.' : ''}`, 100, 'ok');
+    } catch (err) {
+      console.error(err); burnStatus(err.message || String(err), null, 'err');
+    } finally {
+      $('burnGo').disabled = false; $('burnStop').hidden = true;
+      if (burn.video) { burn.video.pause(); burn.video.removeAttribute('src'); burn.video = null; }
+    }
+  };
+  $('burnStop').onclick = () => { burn.stop = true; burn.video?.pause(); if (burn.rec && burn.rec.state !== 'inactive') burn.rec.stop(); };
+
+  renderCues();
+})();
+</script>
+</body>
+</html>
